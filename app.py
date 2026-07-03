@@ -33,6 +33,7 @@ import torch
 import librosa
 
 from fastapi import FastAPI, UploadFile, File, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
@@ -123,6 +124,14 @@ app = FastAPI(
                 "Fichier via POST /transcribe/{lang}, live via WebSocket /transcribe/live/{lang}.",
     version="2.1.0",
     lifespan=lifespan,
+)
+
+# Ouvert pour permettre aux frontends de test (local ou distants) d'appeler l'API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
