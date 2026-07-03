@@ -153,20 +153,24 @@ def _transcribe_file_sync(cfg: dict, tmp_path: str) -> str:
     return cfg["pipeline"](arr)["text"].strip()
 
 
-async def _translate(text: str, target_lang: str) -> str | None:
-    """Traduit `text` vers `target_lang` via un LLM (RodiumAI). Renvoie None si
-    indisponible (pas de clé, texte vide, ou erreur réseau/API) — la traduction
-    est toujours une amélioration optionnelle, jamais bloquante."""
+async def _translate(text: str, source_lang: str, target_lang: str) -> str | None:
+    """Traduit `text` de `source_lang` vers `target_lang` via un LLM (RodiumAI).
+    Déclarer explicitement la langue source est nécessaire : sans elle, GPT-4o-mini
+    devine parfois mal (ex. laisse des mots wolof non traduits) — avec elle, le
+    résultat est stable sur des essais répétés. Renvoie None si indisponible (pas
+    de clé, texte vide, ou erreur réseau/API) — la traduction est toujours une
+    amélioration optionnelle, jamais bloquante."""
     if not TRANSLATION_CLIENT or not text:
         return None
+    source_name = LANG_NAMES.get(source_lang, source_lang)
     target_name = LANG_NAMES.get(target_lang, target_lang)
     try:
         resp = await TRANSLATION_CLIENT.chat.completions.create(
             model=TRANSLATION_MODEL,
             messages=[{
                 "role": "user",
-                "content": f"Traduis ce texte en {target_name}. Réponds uniquement avec "
-                           f"la traduction, sans aucune explication ni guillemets : {text}",
+                "content": f"Traduis ce texte du {source_name} vers le {target_name}. Réponds "
+                           f"uniquement avec la traduction, sans aucune explication ni guillemets : {text}",
             }],
             max_tokens=500,
             temperature=0,
@@ -196,7 +200,7 @@ async def _run_transcription(
         text = await loop.run_in_executor(ASR_EXECUTOR, _transcribe_file_sync, cfg, tmp_path)
         result = {"text": text, "language": lang, "model": cfg["name"]}
         if target_lang:
-            translation = await _translate(text, target_lang)
+            translation = await _translate(text, lang, target_lang)
             result["translation"] = translation
             result["target_lang"] = target_lang
         return JSONResponse(result)
@@ -292,7 +296,7 @@ async def transcribe_live(ws: WebSocket, lang: str, target_lang: str | None = No
                 {"type": "transcript", "text": text, "language": lang, "final": final}
             )
             if final and target_lang:
-                translation = await _translate(text, target_lang)
+                translation = await _translate(text, lang, target_lang)
                 if translation:
                     await ws.send_json(
                         {"type": "translation", "text": translation, "target_lang": target_lang}
