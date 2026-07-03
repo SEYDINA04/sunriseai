@@ -6,5 +6,6 @@ librosa
 soundfile
 boto3
 silero-vad
+openai
 # peft : plus nécessaire — le modèle afriklang_asr_wo1 est déjà fusionné (autonome)
 # torch : NE PAS réinstaller — utiliser celui de l'instance GPU (build CUDA)

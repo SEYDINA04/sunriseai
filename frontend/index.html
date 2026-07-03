@@ -34,6 +34,8 @@
   .badge.ok { background:#dff5e1; color:#1e7a34; }
   .badge.err { background:#fde2e2; color:#a12626; }
   .badge.pending { background:#eee; color:#888; }
+  .translation { color:#5a4a78; }
+  .translation::before { content: "→ "; color: var(--amber); font-weight: bold; }
 </style>
 </head>
 <body>
@@ -58,6 +60,14 @@
         <select id="lang">
           <option value="wo">Wolof</option>
           <option value="twi">Twi</option>
+        </select>
+      </div>
+      <div>
+        <label>Traduire vers</label>
+        <select id="targetLang">
+          <option value="">Aucune traduction</option>
+          <option value="fr">Français</option>
+          <option value="en">Anglais</option>
         </select>
       </div>
     </div>
@@ -94,6 +104,7 @@ const $ = (id) => document.getElementById(id);
 function apiBase() { return $("serverUrl").value.replace(/\/$/, ""); }
 function wsBase() { return apiBase().replace(/^http/, "ws"); }
 function lang() { return $("lang").value; }
+function targetLang() { return $("targetLang").value; }
 
 // --- Vérification santé du service ---
 $("btnHealth").onclick = async () => {
@@ -119,10 +130,18 @@ $("btnUpload").onclick = async () => {
   out.textContent = "Transcription en cours…";
   const fd = new FormData();
   fd.append("file", f, f.name);
+  const qs = targetLang() ? `?target_lang=${targetLang()}` : "";
   try {
-    const r = await fetch(`${apiBase()}/transcribe/${lang()}`, { method: "POST", body: fd });
+    const r = await fetch(`${apiBase()}/transcribe/${lang()}${qs}`, { method: "POST", body: fd });
     const j = await r.json();
-    out.textContent = j.text ? j.text : ("Erreur : " + (j.error || "inconnue"));
+    if (!j.text) { out.textContent = "Erreur : " + (j.error || "inconnue"); return; }
+    out.textContent = j.text;
+    if (j.translation) {
+      const t = document.createElement("div");
+      t.className = "translation";
+      t.textContent = j.translation;
+      out.appendChild(t);
+    }
   } catch (e) {
     out.textContent = "Erreur réseau : " + e;
   }
@@ -166,22 +185,36 @@ async function startLive() {
     return;
   }
 
-  ws = new WebSocket(`${wsBase()}/transcribe/live/${lang()}`);
+  // "ready" et "speech_start" sont des événements de statut à haute fréquence :
+  // on les logge en console pour le debug, sans toucher au DOM (coûteux, ajoute
+  // de la latence perçue) qui reste réservé aux transcriptions, traductions et erreurs.
+  const qs = targetLang() ? `?target_lang=${targetLang()}` : "";
+  ws = new WebSocket(`${wsBase()}/transcribe/live/${lang()}${qs}`);
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === "ready") {
-      out.textContent += `[connecté — modèle ${msg.model}]\n`;
+      console.log("[live] connecté —", msg.model, "target_lang:", msg.target_lang);
     } else if (msg.type === "speech_start") {
-      out.textContent += `[parole détectée…]\n`;
+      console.log("[live] parole détectée");
     } else if (msg.type === "transcript") {
       const tag = msg.final ? "" : " (partiel)";
-      out.textContent += `${msg.text}${tag}\n`;
+      const line = document.createElement("div");
+      line.textContent = `${msg.text}${tag}`;
+      out.appendChild(line);
+      out.scrollTop = out.scrollHeight;
+    } else if (msg.type === "translation") {
+      const line = document.createElement("div");
+      line.className = "translation";
+      line.textContent = msg.text;
+      out.appendChild(line);
       out.scrollTop = out.scrollHeight;
     } else if (msg.type === "error") {
-      out.textContent += `[erreur] ${msg.error}\n`;
+      const line = document.createElement("div");
+      line.textContent = `[erreur] ${msg.error}`;
+      out.appendChild(line);
     }
   };
-  ws.onerror = () => { out.textContent += "[erreur WebSocket]\n"; };
+  ws.onerror = () => { console.error("[live] erreur WebSocket"); };
 
   ws.onopen = () => {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();

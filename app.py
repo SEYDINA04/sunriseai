@@ -6,16 +6,19 @@ Modèles chargés au démarrage :
   - afriklang_asr_tw1  (Twi)
 
 Endpoints :
-  - POST /transcribe/{wo|twi}       transcription d'un fichier audio
-  - WS   /transcribe/live/{wo|twi}  transcription live (PCM 16 kHz int16 mono + Silero VAD)
+  - POST /transcribe/{wo|twi}       transcription d'un fichier audio (option ?target_lang=fr pour traduire)
+  - WS   /transcribe/live/{wo|twi}  transcription live (PCM 16 kHz int16 mono + Silero VAD),
+                                     traduction optionnelle via ?target_lang=fr
 
 Lancement :
     uvicorn app:app --host 0.0.0.0 --port 8000
 
 Variables d'environnement :
-    MODEL_DIR_WO   dossier local du modèle Wolof  (défaut: ./afriklang_asr_wo1)
-    MODEL_DIR_TWI  dossier local du modèle Twi    (défaut: ./afriklang_asr_tw1)
-    S3_BUCKET      bucket S3 pour téléchargement auto (optionnel)
+    MODEL_DIR_WO       dossier local du modèle Wolof  (défaut: ./afriklang_asr_wo1)
+    MODEL_DIR_TWI      dossier local du modèle Twi    (défaut: ./afriklang_asr_tw1)
+    S3_BUCKET          bucket S3 pour téléchargement auto (optionnel)
+    RODIUMAI_API_KEY   clé API RodiumAI pour la traduction (optionnel — sans elle, ?target_lang est ignoré)
+    TRANSLATION_MODEL  modèle RodiumAI utilisé pour la traduction (défaut: openai/gpt-4o-mini)
 """
 
 import os
@@ -38,8 +41,18 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from silero_vad import load_silero_vad, VADIterator
+from openai import AsyncOpenAI
 
 S3_BUCKET = os.environ.get("S3_BUCKET")
+
+# --- Traduction (via RodiumAI, API compatible OpenAI) ---
+RODIUMAI_API_KEY = os.environ.get("RODIUMAI_API_KEY")
+TRANSLATION_MODEL = os.environ.get("TRANSLATION_MODEL", "openai/gpt-4o-mini")
+TRANSLATION_CLIENT = (
+    AsyncOpenAI(api_key=RODIUMAI_API_KEY, base_url="https://api.rodiumai.io/v1")
+    if RODIUMAI_API_KEY else None
+)
+LANG_NAMES = {"fr": "français", "en": "anglais", "es": "espagnol", "wo": "wolof", "twi": "twi"}
 
 MODELS = {
     "wo": {
@@ -140,7 +153,33 @@ def _transcribe_file_sync(cfg: dict, tmp_path: str) -> str:
     return cfg["pipeline"](arr)["text"].strip()
 
 
-async def _run_transcription(lang: str, file_data: bytes, filename: str) -> JSONResponse:
+async def _translate(text: str, target_lang: str) -> str | None:
+    """Traduit `text` vers `target_lang` via un LLM (RodiumAI). Renvoie None si
+    indisponible (pas de clé, texte vide, ou erreur réseau/API) — la traduction
+    est toujours une amélioration optionnelle, jamais bloquante."""
+    if not TRANSLATION_CLIENT or not text:
+        return None
+    target_name = LANG_NAMES.get(target_lang, target_lang)
+    try:
+        resp = await TRANSLATION_CLIENT.chat.completions.create(
+            model=TRANSLATION_MODEL,
+            messages=[{
+                "role": "user",
+                "content": f"Traduis ce texte en {target_name}. Réponds uniquement avec "
+                           f"la traduction, sans aucune explication ni guillemets : {text}",
+            }],
+            max_tokens=500,
+            temperature=0,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[afriklang] erreur traduction : {e}")
+        return None
+
+
+async def _run_transcription(
+    lang: str, file_data: bytes, filename: str, target_lang: str | None = None
+) -> JSONResponse:
     cfg = MODELS.get(lang)
     if cfg is None:
         return JSONResponse({"error": f"Langue '{lang}' non supportée"}, status_code=400)
@@ -155,7 +194,12 @@ async def _run_transcription(lang: str, file_data: bytes, filename: str) -> JSON
             tmp_path = tmp.name
         loop = asyncio.get_event_loop()
         text = await loop.run_in_executor(ASR_EXECUTOR, _transcribe_file_sync, cfg, tmp_path)
-        return JSONResponse({"text": text, "language": lang, "model": cfg["name"]})
+        result = {"text": text, "language": lang, "model": cfg["name"]}
+        if target_lang:
+            translation = await _translate(text, target_lang)
+            result["translation"] = translation
+            result["target_lang"] = target_lang
+        return JSONResponse(result)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     finally:
@@ -176,15 +220,15 @@ def health():
 
 
 @app.post("/transcribe/wo", summary="Transcription Wolof")
-async def transcribe_wo(file: UploadFile = File(...)):
+async def transcribe_wo(file: UploadFile = File(...), target_lang: str | None = None):
     data = await file.read()
-    return await _run_transcription("wo", data, file.filename)
+    return await _run_transcription("wo", data, file.filename, target_lang)
 
 
 @app.post("/transcribe/twi", summary="Transcription Twi")
-async def transcribe_twi(file: UploadFile = File(...)):
+async def transcribe_twi(file: UploadFile = File(...), target_lang: str | None = None):
     data = await file.read()
-    return await _run_transcription("twi", data, file.filename)
+    return await _run_transcription("twi", data, file.filename, target_lang)
 
 
 @app.post("/transcribe", summary="Transcription Wolof (rétrocompatibilité)", include_in_schema=False)
@@ -200,14 +244,16 @@ async def transcribe_legacy(file: UploadFile = File(...)):
 #   - Le client envoie des frames BINAIRES : PCM brut 16 kHz, int16 little-endian, mono.
 #     La taille des chunks est libre, le serveur re-découpe en fenêtres de 512 échantillons.
 #   - Le client peut envoyer la frame TEXTE "stop" pour flusher le segment en cours et fermer.
+#   - Query param optionnel ?target_lang=fr : chaque segment FINAL est aussi traduit.
 #   - Le serveur envoie des messages JSON :
 #       {"type": "ready", ...}                          à la connexion
 #       {"type": "speech_start"}                        début de parole détecté (Silero VAD)
 #       {"type": "transcript", "text": ..., "final": bool}   segment transcrit
+#       {"type": "translation", "text": ..., "target_lang": ...}  traduction du segment final
 # --------------------------------------------------------------------------
 
 @app.websocket("/transcribe/live/{lang}")
-async def transcribe_live(ws: WebSocket, lang: str):
+async def transcribe_live(ws: WebSocket, lang: str, target_lang: str | None = None):
     await ws.accept()
 
     cfg = MODELS.get(lang)
@@ -245,12 +291,19 @@ async def transcribe_live(ws: WebSocket, lang: str):
             await ws.send_json(
                 {"type": "transcript", "text": text, "language": lang, "final": final}
             )
+            if final and target_lang:
+                translation = await _translate(text, target_lang)
+                if translation:
+                    await ws.send_json(
+                        {"type": "translation", "text": translation, "target_lang": target_lang}
+                    )
 
     await ws.send_json({
         "type": "ready",
         "language": lang,
         "model": cfg["name"],
         "format": "pcm s16le 16kHz mono",
+        "target_lang": target_lang,
     })
 
     try:
