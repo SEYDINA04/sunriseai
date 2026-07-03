@@ -1,8 +1,10 @@
-# afriklang_asr_wolof
+# Afriklang ASR
 
-Service de transcription automatique de la parole (ASR) pour le wolof, développé par Afriklang.
+Service de transcription automatique de la parole (ASR) multi-langues, développé par Afriklang.
 
-Basé sur le modèle fusionné autonome **`afriklang_asr_wo1`** (Whisper large-v3 fine-tuné sur le wolof) — aucune dépendance PEFT ni GalsenAI au runtime.
+Modèles fusionnés autonomes (Whisper fine-tuné, aucune dépendance PEFT au runtime) :
+- **`afriklang_asr_wo1`** — Wolof
+- **`afriklang_asr_tw1`** — Twi
 
 ---
 
@@ -10,9 +12,32 @@ Basé sur le modèle fusionné autonome **`afriklang_asr_wo1`** (Whisper large-v
 
 | Méthode | Route | Description |
 |---------|-------|-------------|
-| `GET` | `/` | Interface web (upload fichier + enregistrement micro) |
-| `POST` | `/transcribe` | Transcription audio → `{ "text": "..." }` |
-| `GET` | `/health` | État du service et du modèle |
+| `GET` | `/` | Redirige vers `/docs` (Swagger) |
+| `POST` | `/transcribe/wo` | Transcription Wolof (fichier) → `{ "text": "..." }` |
+| `POST` | `/transcribe/twi` | Transcription Twi (fichier) → `{ "text": "..." }` |
+| `WS` | `/transcribe/live/{wo\|twi}` | Transcription live en streaming (voir ci-dessous) |
+| `GET` | `/health` | État du service et des modèles |
+
+### Transcription live (WebSocket)
+
+Architecture inspirée de [huggingface/speech-to-speech](https://github.com/huggingface/speech-to-speech) :
+**Silero VAD v5** détecte les débuts/fins de parole dans le flux, chaque segment est
+transcrit par le modèle Whisper de la langue choisie.
+
+Protocole :
+- Le client envoie des frames **binaires** : PCM brut **16 kHz, int16 little-endian, mono**
+  (taille de chunk libre, le serveur re-découpe).
+- Frame texte `"stop"` → flush du segment en cours puis fermeture.
+- Le serveur répond en JSON :
+  - `{"type": "ready", ...}` à la connexion
+  - `{"type": "speech_start"}` quand la parole démarre
+  - `{"type": "transcript", "text": "...", "final": true}` à chaque segment transcrit
+    (`"final": false` = segment partiel, la parole continue au-delà de ~28 s)
+
+Client d'exemple : [examples/live_client.py](examples/live_client.py)
+```bash
+python examples/live_client.py mon_audio.wav --lang wo --url wss://asr.afriklang.com
+```
 
 ---
 
