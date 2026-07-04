@@ -1,10 +1,11 @@
-# Afriklang ASR
+# Afriklang ASR & TTS
 
-Service de transcription automatique de la parole (ASR) multi-langues, développé par Afriklang.
+Service de transcription (ASR) et de synthèse vocale (TTS) multi-langues, développé par Afriklang.
 
-Modèles fusionnés autonomes (Whisper fine-tuné, aucune dépendance PEFT au runtime) :
-- **`afriklang_asr_wo1`** — Wolof
-- **`afriklang_asr_tw1`** — Twi
+Modèles :
+- **`afriklang_asr_wo1`** — ASR Wolof (Whisper fine-tuné, fusionné, autonome)
+- **`afriklang_asr_tw1`** — ASR Twi (Whisper fine-tuné, fusionné, autonome)
+- **`afriklang_twi_ttsv1`** — TTS Twi ([VoxCPM2](https://github.com/OpenBMB/VoxCPM), latent AudioVAE, sortie native 48 kHz)
 
 ---
 
@@ -16,7 +17,13 @@ Modèles fusionnés autonomes (Whisper fine-tuné, aucune dépendance PEFT au ru
 | `POST` | `/transcribe/wo` | Transcription Wolof (fichier) → `{ "text": "..." }` |
 | `POST` | `/transcribe/twi` | Transcription Twi (fichier) → `{ "text": "..." }` |
 | `WS` | `/transcribe/live/{wo\|twi}` | Transcription live en streaming (voir ci-dessous) |
+| `POST` | `/tts/twi` | Synthèse vocale Twi : `{ "text": "..." }` → audio `audio/wav` (48 kHz) |
 | `GET` | `/health` | État du service et des modèles |
+
+Les endpoints `/transcribe/*` acceptent un paramètre optionnel `?target_lang=fr` (ou `en`) :
+le texte transcrit est alors aussi traduit via un LLM (RodiumAI, `gpt-4o-mini` par défaut),
+et renvoyé dans le champ `translation` (fichier) ou via un message `{"type": "translation", ...}` (live).
+Nécessite la variable d'environnement `RODIUMAI_API_KEY` — sans elle, le paramètre est simplement ignoré.
 
 ### Transcription live (WebSocket)
 
@@ -38,6 +45,23 @@ Client d'exemple : [examples/live_client.py](examples/live_client.py)
 ```bash
 python examples/live_client.py mon_audio.wav --lang wo --url wss://asr.afriklang.com
 ```
+
+### Synthèse vocale (TTS)
+
+```bash
+curl -X POST https://asr.afriklang.com/tts/twi \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Wo ho te sɛn?"}' \
+  --output sortie.wav
+```
+
+Renvoie directement le flux audio (`audio/wav`, 48 kHz) — pas de JSON.
+Le modèle est chargé au démarrage avec les modèles ASR ; comme eux, il partage l'executor
+GPU à un seul thread (une seule inférence à la fois, ASR ou TTS).
+
+> ⚠️ VoxCPM2 fait ~5 Go (poids + AudioVAE), en plus des ~4,5 Go des deux modèles ASR (fp16).
+> Sur `g4dn.xlarge` (T4 16 Go), la marge reste correcte mais à surveiller (`nvidia-smi`) au fil
+> des futurs modèles ajoutés.
 
 ---
 
@@ -143,9 +167,12 @@ cloudflared tunnel --url http://localhost:8000
 
 | Variable | Rôle | Défaut |
 |----------|------|--------|
-| `MODEL_DIR` | Dossier local du modèle | `./afriklang_asr_wo1` |
-| `S3_BUCKET` | Bucket S3 pour téléchargement auto | _(non défini)_ |
-| `S3_PREFIX` | Préfixe S3 du modèle | `models/afriklang_asr_wo1` |
+| `MODEL_DIR_WO` | Dossier local du modèle ASR Wolof | `./afriklang_asr_wo1` |
+| `MODEL_DIR_TWI` | Dossier local du modèle ASR Twi | `./afriklang_asr_tw1` |
+| `MODEL_DIR_TTS_TWI` | Dossier local du modèle TTS Twi | `./afriklang_twi_ttsv1` |
+| `S3_BUCKET` | Bucket S3 pour téléchargement auto des modèles | _(non défini)_ |
+| `RODIUMAI_API_KEY` | Clé API RodiumAI pour la traduction | _(non défini — `target_lang` ignoré)_ |
+| `TRANSLATION_MODEL` | Modèle RodiumAI utilisé pour traduire | `openai/gpt-4o-mini` |
 
 Voir `.env.example` pour un template prêt à l'emploi.
 

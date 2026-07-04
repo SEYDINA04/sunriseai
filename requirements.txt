@@ -7,5 +7,8 @@ soundfile
 boto3
 silero-vad
 openai
+voxcpm
 # peft : plus nécessaire — le modèle afriklang_asr_wo1 est déjà fusionné (autonome)
 # torch : NE PAS réinstaller — utiliser celui de l'instance GPU (build CUDA)
+# voxcpm dépend de torch>=2.5.0 : vérifier après install que torch.cuda.is_available()
+# est toujours True et que la version torch n'a pas été remplacée par pip

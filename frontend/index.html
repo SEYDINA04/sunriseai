@@ -96,6 +96,18 @@
     <div class="out" id="outLive"></div>
   </div>
 
+  <div class="card">
+    <h2>3. Synthèse vocale — Twi (texte → audio)</h2>
+    <div class="row">
+      <input type="text" id="ttsText" placeholder="Écris un texte en twi…" style="flex:1">
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnTts">Générer l'audio</button>
+    </div>
+    <div class="muted">Modèle afriklang_twi_ttsv1 (VoxCPM2, 48 kHz) — la génération peut prendre quelques secondes.</div>
+    <div class="out" id="outTts"></div>
+  </div>
+
 </main>
 
 <script>
@@ -252,6 +264,35 @@ function stopLive() {
 }
 
 $("recBtn").onclick = () => (recording ? stopLive() : startLive());
+
+// --- 3. Synthèse vocale (TTS) Twi ---
+$("btnTts").onclick = async () => {
+  const text = $("ttsText").value.trim();
+  const out = $("outTts");
+  if (!text) { out.textContent = "Écris un texte d'abord."; return; }
+  out.textContent = "Génération en cours…";
+  try {
+    const r = await fetch(`${apiBase()}/tts/twi`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      out.textContent = "Erreur : " + (j.error || r.statusText);
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    out.innerHTML = "";
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = url;
+    out.appendChild(audio);
+  } catch (e) {
+    out.textContent = "Erreur réseau : " + e;
+  }
+};
 </script>
 </body>
 </html>

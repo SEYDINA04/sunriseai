@@ -9,13 +9,15 @@ Endpoints :
   - POST /transcribe/{wo|twi}       transcription d'un fichier audio (option ?target_lang=fr pour traduire)
   - WS   /transcribe/live/{wo|twi}  transcription live (PCM 16 kHz int16 mono + Silero VAD),
                                      traduction optionnelle via ?target_lang=fr
+  - POST /tts/twi                   synthèse vocale Twi : {"text": "..."} -> audio/wav (48 kHz)
 
 Lancement :
     uvicorn app:app --host 0.0.0.0 --port 8000
 
 Variables d'environnement :
-    MODEL_DIR_WO       dossier local du modèle Wolof  (défaut: ./afriklang_asr_wo1)
-    MODEL_DIR_TWI      dossier local du modèle Twi    (défaut: ./afriklang_asr_tw1)
+    MODEL_DIR_WO       dossier local du modèle ASR Wolof  (défaut: ./afriklang_asr_wo1)
+    MODEL_DIR_TWI      dossier local du modèle ASR Twi    (défaut: ./afriklang_asr_tw1)
+    MODEL_DIR_TTS_TWI  dossier local du modèle TTS Twi    (défaut: ./afriklang_twi_ttsv1)
     S3_BUCKET          bucket S3 pour téléchargement auto (optionnel)
     RODIUMAI_API_KEY   clé API RodiumAI pour la traduction (optionnel — sans elle, ?target_lang est ignoré)
     TRANSLATION_MODEL  modèle RodiumAI utilisé pour la traduction (défaut: openai/gpt-4o-mini)
@@ -26,6 +28,7 @@ os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("USE_TORCH", "1")
 
 import asyncio
+import io
 import tempfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -34,14 +37,17 @@ from contextlib import asynccontextmanager, suppress
 import numpy as np
 import torch
 import librosa
+import soundfile as sf
 
 from fastapi import FastAPI, UploadFile, File, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
+from pydantic import BaseModel
 
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from silero_vad import load_silero_vad, VADIterator
 from openai import AsyncOpenAI
+from voxcpm import VoxCPM
 
 S3_BUCKET = os.environ.get("S3_BUCKET")
 
@@ -69,17 +75,50 @@ MODELS = {
     },
 }
 
+# --- Synthèse vocale (TTS) : VoxCPM2, latent AudioVAE, sortie native 48 kHz ---
+TTS_MODELS = {
+    "twi": {
+        "dir": os.environ.get("MODEL_DIR_TTS_TWI", "./afriklang_twi_ttsv1"),
+        "s3_prefix": "models/afriklang_twi_ttsv1",
+        "name": "afriklang_twi_ttsv1",
+        "model": None,
+    },
+}
+
 STATE = {"device": None}
 
-# Le GPU ne traite qu'une inférence à la fois : un executor à 1 thread
-# sérialise toutes les transcriptions (batch + live) sans bloquer la boucle asyncio.
-ASR_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+# Le GPU ne traite qu'une inférence à la fois (ASR ou TTS) : un executor à 1 thread
+# sérialise tous les appels modèle sans bloquer la boucle asyncio.
+INFERENCE_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 
 # --- Paramètres du flux live ---
 SAMPLE_RATE = 16000
 VAD_WINDOW = 512            # taille de fenêtre imposée par Silero VAD v5 à 16 kHz (32 ms)
 PRE_ROLL_WINDOWS = 16       # ~0,5 s d'audio conservé avant le déclenchement de la parole
 MAX_SEGMENT_S = 28          # flush forcé avant la limite des 30 s de Whisper
+MIN_SEGMENT_S = 0.35        # sous ce seuil, un déclenchement VAD est un faux positif (bruit/souffle)
+
+# Seuils natifs Whisper pour éviter les hallucinations sur silence/bruit
+# (cf. https://github.com/openai/whisper/discussions/679) : plutôt que d'inventer
+# du texte plausible sur un segment sans vraie parole, le modèle le signale comme vide.
+WHISPER_GENERATE_KWARGS = {
+    "no_speech_threshold": 0.6,
+    "logprob_threshold": -1.0,
+    "compression_ratio_threshold": 2.4,
+    "condition_on_prev_tokens": False,
+}
+
+# Whisper (et ses fine-tunes) hallucinent des mentions de crédit de sous-titrage
+# sur du silence — signature bien connue héritée de données d'entraînement sous-titrées.
+HALLUCINATION_PATTERNS = (
+    "sous-titr", "sous titr", "amara.org", "abonnez-vous",
+    "merci d'avoir regardé", "merci pour votre attention",
+)
+
+
+def _is_hallucination(text: str) -> bool:
+    t = text.lower()
+    return any(p in t for p in HALLUCINATION_PATTERNS)
 
 
 def _ensure_model_local(model_dir: str, s3_prefix: str):
@@ -124,6 +163,11 @@ def _load_all_models():
         cfg["pipeline"] = _load_pipeline(cfg["dir"], device, dtype)
         print(f"[afriklang] {cfg['name']} chargé sur {device}")
 
+    for lang, cfg in TTS_MODELS.items():
+        _ensure_model_local(cfg["dir"], cfg["s3_prefix"])
+        cfg["model"] = VoxCPM.from_pretrained(cfg["dir"], load_denoiser=False)
+        print(f"[afriklang] {cfg['name']} chargé (TTS)")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -150,7 +194,8 @@ app.add_middleware(
 
 def _transcribe_file_sync(cfg: dict, tmp_path: str) -> str:
     arr, _ = librosa.load(tmp_path, sr=SAMPLE_RATE, mono=True)
-    return cfg["pipeline"](arr)["text"].strip()
+    text = cfg["pipeline"](arr, generate_kwargs=WHISPER_GENERATE_KWARGS)["text"].strip()
+    return "" if _is_hallucination(text) else text
 
 
 async def _translate(text: str, source_lang: str, target_lang: str) -> str | None:
@@ -197,7 +242,7 @@ async def _run_transcription(
             tmp.write(file_data)
             tmp_path = tmp.name
         loop = asyncio.get_event_loop()
-        text = await loop.run_in_executor(ASR_EXECUTOR, _transcribe_file_sync, cfg, tmp_path)
+        text = await loop.run_in_executor(INFERENCE_EXECUTOR, _transcribe_file_sync, cfg, tmp_path)
         result = {"text": text, "language": lang, "model": cfg["name"]}
         if target_lang:
             translation = await _translate(text, lang, target_lang)
@@ -211,6 +256,39 @@ async def _run_transcription(
             os.remove(tmp_path)
 
 
+def _synthesize_tts_sync(cfg: dict, text: str) -> bytes:
+    wav = cfg["model"].generate(text=text, cfg_value=2.0, inference_timesteps=10)
+    sample_rate = getattr(getattr(cfg["model"], "tts_model", None), "sample_rate", 48000)
+    buf = io.BytesIO()
+    sf.write(buf, wav, sample_rate, format="WAV")
+    return buf.getvalue()
+
+
+class TTSRequest(BaseModel):
+    text: str
+
+
+async def _run_tts(lang: str, req: TTSRequest):
+    cfg = TTS_MODELS.get(lang)
+    if cfg is None:
+        return JSONResponse({"error": f"Langue '{lang}' non supportée en TTS"}, status_code=400)
+    if cfg["model"] is None:
+        return JSONResponse({"error": f"Modèle TTS '{lang}' non chargé"}, status_code=503)
+    if not req.text.strip():
+        return JSONResponse({"error": "Texte vide"}, status_code=400)
+    try:
+        loop = asyncio.get_event_loop()
+        wav_bytes = await loop.run_in_executor(INFERENCE_EXECUTOR, _synthesize_tts_sync, cfg, req.text)
+        return Response(content=wav_bytes, media_type="audio/wav")
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/tts/twi", summary="Synthèse vocale Twi (texte → audio)")
+async def tts_twi(req: TTSRequest):
+    return await _run_tts("twi", req)
+
+
 @app.get("/health")
 def health():
     return {
@@ -219,6 +297,10 @@ def health():
         "models": {
             lang: {"name": cfg["name"], "loaded": cfg["pipeline"] is not None}
             for lang, cfg in MODELS.items()
+        },
+        "tts_models": {
+            lang: {"name": cfg["name"], "loaded": cfg["model"] is not None}
+            for lang, cfg in TTS_MODELS.items()
         },
     }
 
@@ -270,7 +352,7 @@ async def transcribe_live(ws: WebSocket, lang: str, target_lang: str | None = No
     # (récurrent) qui ne doit pas être partagé entre plusieurs flux.
     vad = VADIterator(
         load_silero_vad(),
-        threshold=0.5,
+        threshold=0.6,
         sampling_rate=SAMPLE_RATE,
         min_silence_duration_ms=600,
         speech_pad_ms=100,
@@ -288,9 +370,19 @@ async def transcribe_live(ws: WebSocket, lang: str, target_lang: str | None = No
             return
         audio = np.concatenate(segment)
         segment = []
+
+        # Un déclenchement VAD trop court est presque toujours un faux positif
+        # (bruit, souffle, clic) — l'envoyer à Whisper ne ferait qu'halluciner.
+        if len(audio) / SAMPLE_RATE < MIN_SEGMENT_S:
+            return
+
         text = await loop.run_in_executor(
-            ASR_EXECUTOR, lambda: cfg["pipeline"](audio)["text"].strip()
+            INFERENCE_EXECUTOR,
+            lambda: cfg["pipeline"](audio, generate_kwargs=WHISPER_GENERATE_KWARGS)["text"].strip(),
         )
+        if text and _is_hallucination(text):
+            print(f"[afriklang] hallucination filtrée : {text!r}")
+            text = ""
         if text:
             await ws.send_json(
                 {"type": "transcript", "text": text, "language": lang, "final": final}
