@@ -10,5 +10,9 @@ openai
 voxcpm
 # peft : plus nécessaire — le modèle afriklang_asr_wo1 est déjà fusionné (autonome)
 # torch : NE PAS réinstaller — utiliser celui de l'instance GPU (build CUDA)
-# voxcpm dépend de torch>=2.5.0 : vérifier après install que torch.cuda.is_available()
-# est toujours True et que la version torch n'a pas été remplacée par pip
+#
+# IMPORTANT : toujours installer via `pip install -r requirements.txt` (résolution
+# globale), jamais `pip install voxcpm` seul — sans le fichier complet, pip ignore
+# le pin `transformers==4.55.2` ci-dessus et installe la dernière version compatible
+# avec voxcpm (>=4.36.2), ce qui a déjà cassé le pipeline Whisper une fois (upgrade
+# silencieux vers transformers 5.13.0, testé incompatible avec nos modèles ASR).
