@@ -15,6 +15,45 @@ export function bufferToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
+/** Convert mono Float32 PCM ([-1, 1]) to 16-bit little-endian signed samples. */
+export function floatTo16BitPCM(samples: Float32Array): Int16Array<ArrayBuffer> {
+  const out = new Int16Array(samples.length)
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+  }
+  return out
+}
+
+/**
+ * Linearly resample mono Float32 PCM from `sourceRate` to `targetRate`.
+ *
+ * Used for the live WebSocket stream: the browser's AudioContext runs at
+ * whatever rate the output device reports (44.1/48 kHz typically), but the
+ * backend's VAD + Whisper pipeline requires exactly 16 kHz. Good enough for
+ * speech (no anti-aliasing filter) — for offline transcription we instead use
+ * {@link decodeToMono16k}, which resamples via OfflineAudioContext.
+ */
+export function resampleLinear(
+  input: Float32Array,
+  sourceRate: number,
+  targetRate: number,
+): Float32Array {
+  if (sourceRate === targetRate) return input
+  const ratio = sourceRate / targetRate
+  const outLength = Math.round(input.length / ratio)
+  const out = new Float32Array(outLength)
+  for (let i = 0; i < outLength; i++) {
+    const srcIndex = i * ratio
+    const i0 = Math.floor(srcIndex)
+    const frac = srcIndex - i0
+    const s0 = input[i0] ?? 0
+    const s1 = input[i0 + 1] ?? s0
+    out[i] = s0 + (s1 - s0) * frac
+  }
+  return out
+}
+
 /** Encode mono Float32 PCM samples as a 16-bit little-endian WAV byte array. */
 export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   const bytesPerSample = 2
@@ -41,12 +80,8 @@ export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array
   writeString(36, "data")
   view.setUint32(40, dataSize, true)
 
-  let offset = 44
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]))
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
-    offset += bytesPerSample
-  }
+  const pcm = floatTo16BitPCM(samples)
+  new Uint8Array(buffer, 44).set(new Uint8Array(pcm.buffer))
   return new Uint8Array(buffer)
 }
 

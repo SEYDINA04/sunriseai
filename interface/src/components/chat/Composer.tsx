@@ -51,9 +51,9 @@ export function Composer({
   const recorder = useAudioRecorder((blob) => setAudioBlob(blob))
   const preview = uploadPreview ?? recorder.previewUrl
 
-  const wsasr = useWebSocketASR((finalTranscript) => {
+  const wsasr = useWebSocketASR((finalTranscript, finalTranslation) => {
     if (finalTranscript.trim()) {
-      controller.sendTranscriptDirect(finalTranscript, controller.lang)
+      controller.sendTranscriptDirect(finalTranscript, controller.lang, finalTranslation)
     }
   })
 
@@ -83,7 +83,7 @@ export function Composer({
     if (mode === "tts" && controller.lang !== "TW") {
       controller.setLang("TW")
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, controller.lang, controller.setLang])
 
   const isText = mode === "translation" || mode === "tts"
@@ -129,7 +129,7 @@ export function Composer({
     if (wsasr.status === "recording") {
       wsasr.stop()
     } else {
-      void wsasr.start(controller.lang)
+      void wsasr.start(controller.lang, controller.asrTargetLang ?? undefined)
     }
   }
 
@@ -294,11 +294,7 @@ export function Composer({
                 {/* Mic / Stop button */}
                 <button
                   onClick={
-                    liveMode
-                      ? handleLiveMic
-                      : recorder.recording
-                        ? recorder.stop
-                        : recorder.start
+                    liveMode ? handleLiveMic : recorder.recording ? recorder.stop : recorder.start
                   }
                   aria-label={
                     liveMode

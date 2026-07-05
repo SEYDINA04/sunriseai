@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { bufferToBase64, encodeWav, chunkSamples } from "./audio"
+import { bufferToBase64, encodeWav, chunkSamples, floatTo16BitPCM, resampleLinear } from "./audio"
 
 describe("bufferToBase64", () => {
   it("matches btoa for a small buffer", () => {
@@ -42,6 +42,47 @@ describe("encodeWav", () => {
     const view = new DataView(wav.buffer)
     expect(view.getInt16(44, true)).toBe(0x7fff)
     expect(view.getInt16(46, true)).toBe(-0x8000)
+  })
+})
+
+describe("floatTo16BitPCM", () => {
+  it("scales full-range samples without clipping", () => {
+    const out = floatTo16BitPCM(new Float32Array([0, 1, -1, 0.5, -0.5]))
+    expect(Array.from(out)).toEqual([0, 0x7fff, -0x8000, 16383, -16384])
+  })
+
+  it("clamps samples outside [-1, 1]", () => {
+    const out = floatTo16BitPCM(new Float32Array([2, -2]))
+    expect(out[0]).toBe(0x7fff)
+    expect(out[1]).toBe(-0x8000)
+  })
+})
+
+describe("resampleLinear", () => {
+  it("returns the same array when rates match", () => {
+    const input = new Float32Array([0.1, 0.2, 0.3])
+    expect(resampleLinear(input, 16000, 16000)).toBe(input)
+  })
+
+  it("halves the length when downsampling by 2x", () => {
+    const input = new Float32Array(1000).fill(0.5)
+    const out = resampleLinear(input, 32000, 16000)
+    expect(out.length).toBe(500)
+  })
+
+  it("doubles the length when upsampling by 2x", () => {
+    const input = new Float32Array(500).fill(0.5)
+    const out = resampleLinear(input, 16000, 32000)
+    expect(out.length).toBe(1000)
+  })
+
+  it("interpolates between two known points", () => {
+    // Source at 2 Hz -> target at 4 Hz: expect a sample inserted halfway.
+    const input = new Float32Array([0, 1])
+    const out = resampleLinear(input, 2, 4)
+    expect(out.length).toBe(4)
+    expect(out[0]).toBeCloseTo(0)
+    expect(out[2]).toBeCloseTo(1)
   })
 })
 

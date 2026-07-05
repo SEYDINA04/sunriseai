@@ -176,7 +176,8 @@ export function MessageBubble({ message }: { message: Message }) {
                   {t("bubble.translatedTo")}
                   {message.targetLang && (
                     <>
-                      {" "}→ <LangFlag code={message.targetLang} /> {nameFor(message.targetLang)}
+                      {" "}
+                      → <LangFlag code={message.targetLang} /> {nameFor(message.targetLang)}
                     </>
                   )}
                 </p>

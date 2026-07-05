@@ -2,11 +2,16 @@ import type { NextConfig } from "next"
 
 const isDev = process.env.NODE_ENV !== "production"
 
+// The live WebSocket ASR feature (useWebSocketASR) connects directly from the
+// browser to the backend — unlike file-based ASR/TTS, which stay behind our
+// /api proxy — so its origin must be allow-listed explicitly in production.
+const liveWsOrigin = process.env.NEXT_PUBLIC_ASR_WS_URL
+
 // Content-Security-Policy: defense-in-depth for the untrusted model output we render.
 // - media/blob/data: Web Audio conversion + inline <audio> previews
 // - img react-circle-flags loads SVGs from its default CDN
-// - connect 'self': the browser only talks to our own /api proxy (the ASR backend
-//   call happens server-side and is not subject to this policy)
+// - connect 'self' + liveWsOrigin: our /api proxy (file-based ASR/TTS) plus the
+//   live WebSocket endpoint the browser talks to directly
 // NOTE: script-src uses 'unsafe-inline' because Next injects inline bootstrap
 // scripts; a nonce-based policy (via middleware) is the future hardening step.
 const csp = [
@@ -20,7 +25,7 @@ const csp = [
   "font-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
+  `connect-src 'self'${liveWsOrigin ? ` ${liveWsOrigin}` : ""}${isDev ? " ws: wss:" : ""}`,
 ].join("; ")
 
 const securityHeaders = [
