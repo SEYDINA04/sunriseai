@@ -1,0 +1,12 @@
+# Required Claude skills for this project (single source of truth).
+#
+# Format (one per line):  <owner/repo>[@ref] <path/inside/repo>
+#   - ref is optional and defaults to the repo's default branch.
+#   - lines starting with '#' and blank lines are ignored.
+#
+# install.sh reads this file and copies each skill into .claude/skills/.
+# >>> When a skill is added to or removed from the project, edit THIS file. <<<
+
+anthropics/skills skills/frontend-design
+anthropics/skills skills/theme-factory
+anthropics/skills skills/webapp-testing

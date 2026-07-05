@@ -1,18 +1,49 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, Sora } from "next/font/google";
 import "./globals.css";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { LanguageProvider } from "@/lib/i18n";
+import { ConversationProvider } from "@/components/chat/ConversationProvider";
 
 const inter = Inter({
   variable: "--font-inter",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+});
+
+// Display face more character than a default geometric sans, used with
+// restraint for the wordmark and the greeting hero. Inter covers any glyphs
+// Sora lacks (e.g. ɔ, ɛ) via the --font-display fallback chain.
+const sora = Sora({
+  variable: "--font-sora",
+  subsets: ["latin", "latin-ext"],
 });
 
 export const metadata: Metadata = {
-  title: "Afriklang Models — Testez vos modèles de langues africaines",
+  title: "Bambi African Languages Assistant",
   description:
-    "ASR, TTS et Traduction pour le Wolof, le Twi et le Fon — testez vos modèles de langues locales africaines.",
+    "Wolof speech-to-text (ASR). Record or upload audio to transcribe it.",
+  icons: { icon: "/bambi.svg" },
+  // Keep this site out of every search engine index. Emits
+  // <meta name="robots" content="noindex, nofollow, nocache"> plus a
+  // googlebot-specific tag on every page.
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
+
+// Cover the full screen on notched/edge-to-edge phones so env(safe-area-inset-*)
+// reports real insets, and pin scale to 1 to avoid mobile zoom-on-focus jumps.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b0a12",
 };
 
 export default function RootLayout({
@@ -21,11 +52,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+    <html lang="en" className={`${inter.variable} ${sora.variable} h-full antialiased`}>
+      <body className="h-full">
+        <LanguageProvider>
+          <ConversationProvider>{children}</ConversationProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

@@ -1,15 +1,45 @@
 @import "tailwindcss";
 
+/*
+  ── Bambi theme "Indigo Griot" ───────────────────────────────────────────
+  A cool indigo/blue system derived from the brand mark's own gradient
+  (#00539F → #321E53), warmed by a single West-African gold accent (#E8B04B).
+  Signature: the four-bar waveform from the logo, animated as an equalizer.
+  Display: Sora (with Inter fallback for extended/IPA glyphs). Body: Inter.
+*/
 @theme inline {
-  --color-obsidian-950: #060606;
-  --color-blue-bright: #00539F;
-  --color-text-muted: #a0a0a0;
+  /* Base indigo-tinted ink, not neutral black (rooted in the brand indigo) */
+  --color-obsidian-950: #0b0a12;
+  --color-obsidian-900: #100e1a;
+  --color-obsidian-850: #171426;
+
+  /* Brand the bambi gradient: blue → indigo, plus a lighter azure highlight */
+  --color-blue-bright: #0a5fb4; /* primary action brand blue, lifted for contrast */
+  --color-blue-soft: #4d9fff; /* azure highlight (matches the greeting gradient) */
+  --color-brand-indigo: #7b5ae0; /* indigo lifted for UI use (from the #321E53 family) */
+  --color-brand-indigo-deep: #321e53;
+
+  /* Accent warm West-African gold; the single warm note in a cool interface */
+  --color-gold: #e8b04b;
+  --color-gold-soft: #f3c976;
+
+  --color-text-muted: #9b97ad; /* indigo-tinted muted, not neutral grey */
   --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-sora), var(--font-inter), system-ui, sans-serif;
   --font-mono: "SF Mono", "Fira Code", monospace;
+
+  /* Surfaces used across the chat shell */
+  --color-surface-sidebar: #0a0812;
+  --color-surface-composer: rgba(255, 255, 255, 0.04);
+  --color-surface-bubble: rgba(255, 255, 255, 0.045);
 
   --animate-shimmer: shimmer 8s linear infinite;
   --animate-reveal: reveal 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   --animate-float: float 6s ease-in-out infinite;
+  --animate-blink: blink 1s steps(2, start) infinite;
+  --animate-dot: dot 1.2s ease-in-out infinite;
+  --animate-equalize: equalize 1.1s ease-in-out infinite; /* signature waveform */
+  --animate-recwave: recwave 0.9s ease-in-out infinite; /* live voice-recording meter */
 
   @keyframes shimmer {
     0% { background-position: 200% 0; }
@@ -23,13 +53,113 @@
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-8px); }
   }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  @keyframes dot {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+    40% { transform: translateY(-4px); opacity: 1; }
+  }
+  /* The brand's sound-bars, breathing like an equalizer. */
+  @keyframes equalize {
+    0%, 100% { transform: scaleY(0.3); }
+    50% { transform: scaleY(1); }
+  }
+  /* The logo's bars reacting to a voice — a livelier, less even bounce so it
+     reads as a real recording meter rather than a uniform pulse. */
+  @keyframes recwave {
+    0%, 100% { transform: scaleY(0.28); }
+    20% { transform: scaleY(0.72); }
+    40% { transform: scaleY(0.46); }
+    60% { transform: scaleY(1); }
+    80% { transform: scaleY(0.58); }
+  }
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
+  /* Dynamic viewport height so mobile browser chrome (the collapsing address
+     bar / toolbar) never hides the composer. Falls back to 100% where dvh is
+     unsupported. */
+  height: 100dvh;
   background-color: var(--color-obsidian-950);
   color: #fff;
+  overflow: hidden;
+  /* A faint indigo aura, top-left, so the base reads as deep indigo not flat black. */
+  background-image:
+    radial-gradient(900px 600px at 12% -10%, rgba(50, 30, 83, 0.55), transparent 60%),
+    radial-gradient(700px 500px at 100% 0%, rgba(0, 83, 159, 0.22), transparent 55%);
+  background-attachment: fixed;
 }
 
 ::selection {
-  background-color: rgba(0, 83, 159, 0.4);
+  background-color: rgba(77, 159, 255, 0.32);
+}
+
+/* Branded keyboard focus visible, gold, consistent (quality floor). */
+:where(a, button, textarea, input, select, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* Text inputs manage their own focus styling no gold outline. */
+:where(textarea, input):focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
+
+/* Greeting text used in the empty state azure highlight, solid (no gradient on text). */
+.text-greeting-gradient {
+  color: #6fb2ff;
+}
+
+/* Streaming caret appended to in-flight assistant text */
+.streaming-caret::after {
+  content: "";
+  display: inline-block;
+  width: 0.5ch;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background-color: var(--color-blue-soft);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+/* Thin, dark scrollbars for the shell panes */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Respect users who prefer reduced motion (quality floor). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

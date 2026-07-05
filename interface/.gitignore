@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but keep the documented template tracked.
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +41,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code never commit installed skills or sub-agents.
+# They are restored locally by running:
+#   bash .claude/skills/skills-installer/install.sh
+# Only the `skills-installer` skill (the bootstrap) is tracked.
+.claude/skills/*
+!.claude/skills/skills-installer
+.claude/agents/

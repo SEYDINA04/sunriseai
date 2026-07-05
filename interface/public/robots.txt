@@ -1,0 +1,10 @@
+# This site must never be referenced by search engines.
+#
+# Indexing is blocked via a "noindex" directive sent on every response
+# (X-Robots-Tag HTTP header + <meta name="robots"> tag).
+#
+# Crawling is intentionally ALLOWED here: a crawler has to fetch the page to
+# see the noindex directive. Adding "Disallow: /" would block the crawl, hide
+# the noindex, and could leave bare URLs in search results. Do not add it.
+User-agent: *
+Allow: /
