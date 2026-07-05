@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-obsidian-950: #060606;
+  --color-blue-bright: #00539F;
+  --color-text-muted: #a0a0a0;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", monospace;
+
+  --animate-shimmer: shimmer 8s linear infinite;
+  --animate-reveal: reveal 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  --animate-float: float 6s ease-in-out infinite;
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @keyframes reveal {
+    0% { opacity: 0; transform: translateY(12px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+}
+
+body {
+  background-color: var(--color-obsidian-950);
+  color: #fff;
+}
+
+::selection {
+  background-color: rgba(0, 83, 159, 0.4);
+}
