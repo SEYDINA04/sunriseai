@@ -1,6 +1,6 @@
-# Afriklang Voicemail Intelligence
+# Teekiai
 
-**Voice Transcription Plugin for West African Telecom Call Centers — Twi & Wolof**
+**Speech AI for West African low-resource languages — Wolof, Twi & Fon**
 
 AI for Good Hackathon · Submission for the FTK "AI for Good" challenge
 
@@ -8,168 +8,283 @@ AI for Good Hackathon · Submission for the FTK "AI for Good" challenge
 
 ## 1. Overview
 
-Afriklang Voicemail Intelligence turns every voice message received by a telecom
-call center into **transcribed, searchable, and prioritizable text**. It targets a
-concrete operational problem: incoming voice messages that are slow to process
-manually and impossible to search or index — a challenge made worse for African
-low-resource languages where no reliable transcription solution exists today.
+**Teekiai** is a speech-AI platform that brings automatic speech recognition
+(ASR), text-to-speech (TTS) and translation to West African languages that
+mainstream models ignore. It targets a concrete gap: for low-resource African
+languages such as **Wolof**, **Twi** and **Fon**, no reliable speech technology
+exists today, so voice — the most natural interface for millions of speakers —
+stays locked out of digital products.
 
-> **One-line pitch:** *An opaque voice channel becomes a searchable database.*
+> **One-line pitch:** *Give African languages a voice that machines can hear, read and speak.*
 
-The product never changes how a customer leaves a message. It only transforms what
-happens next: an audio file to listen to becomes text to act on.
+Teekiai turns speech into searchable, actionable text, translates it on demand,
+and speaks text back out loud — all through one simple chat interface backed by
+in-house fine-tuned models.
 
 ### What we are implementing
 
-The system is powered by the **Afriklang ASR engine**, an in-house speech-to-text
-service already fine-tuned on **Twi** and **Wolof**. This repository documents the
-end-to-end technology stack behind that engine and the application layer built on
-top of it for the hackathon demo.
+The platform is powered by an in-house engine built on top of **fine-tuned
+Whisper** (ASR) and **VoxCPM** (TTS) models, served from our own GPU
+infrastructure — **no dependency on any third-party speech API**. This repository
+contains the full end-to-end stack: the model-serving backend and the web
+interface built on top of it for the hackathon demo.
+
+### Capabilities
+
+| Capability | Languages | Status |
+|-----------|-----------|--------|
+| **ASR** — speech → text | Wolof, Twi | Live (Fon coming) |
+| **TTS** — text → speech | Twi | Live (Wolof, Fon coming) |
+| **Translation** — to French / English | Wolof, Twi (as an add-on to ASR) | Live (optional) |
+| **Live transcription** — real-time streaming | Wolof, Twi | Live |
 
 ---
 
-## 2. System Architecture
+## 2. Repository Structure
 
-The product works as a linear, layered pipeline. Each stage has a single
-responsibility, which keeps the demo predictable and the system easy to reason about.
+Teekiai is a monorepo with two independent, deployable parts:
 
 ```
-Voice message received
-        │
-        ▼
-   API Backend          ── receives the audio, routes it to the model
-        │
-        ▼
-   ASR Transcription    ── Afriklang fine-tuned Whisper model (Twi / Wolof)
-        │
-        ▼
-   Confidence Scoring   ── attaches a reliability score to each transcription
-        │
-        ▼
-   Keyword Detection    ── deterministic urgency / category tagging
-        │
-        ▼
-   Indexing             ── full-text search + filtering
-        │
-        ▼
-   Searchable Inbox     ── call-center-style interface
+teekiai/
+├── app/          Python backend — FastAPI service serving the AI models
+│   ├── app.py            ASR + TTS + translation service
+│   ├── requirements.txt
+│   ├── Dockerfile        python:3.11-slim + ffmpeg
+│   └── examples/         CLI client for the live WebSocket
+│
+└── interface/    Next.js frontend — the chat web app
+    ├── src/app/          App Router pages + API route handlers (proxies)
+    ├── src/components/   Chat UI (React 19 + Tailwind 4)
+    ├── src/hooks/        Recorder, live WebSocket ASR, chat controller
+    └── src/lib/          Audio processing, ASR/TTS clients, i18n
 ```
-
-### Reliability principle
-
-**AI is used only for transcription.** Everything else — confidence thresholds,
-keyword detection, and message routing — runs on **deterministic code**. This
-guarantees that no "AI miscalculation" can disrupt the pipeline, and makes the
-behavior fully reproducible.
 
 ---
 
-## 3. Technology Stack
+## 3. System Architecture
 
-### 3.1 Core ASR Engine
+Teekiai follows a clear separation between the **model backend** and the
+**web frontend**, connected through a thin proxy layer.
+
+```
+Browser (mic / upload / text)
+        │
+        ▼
+   Next.js Interface        ── chat UI, records & decodes audio in-browser
+        │
+        ├── /api/asr/transcribe   (server proxy: rate-limit, auth, timeout guard)
+        ├── /api/tts/twi          (server proxy)
+        │
+        ▼
+   FastAPI Backend          ── receives audio/text, routes to the right model
+        │
+        ├── ASR pipeline     ── fine-tuned Whisper (Wolof / Twi)
+        ├── TTS pipeline     ── VoxCPM (Twi), 48 kHz output
+        └── Translation      ── optional LLM pass (French / English)
+        │
+        ▼
+   Live path (WebSocket)    ── raw PCM stream + Silero VAD → per-segment ASR
+```
+
+### Design principles
+
+- **Own the models, own the pipeline.** ASR and TTS run entirely on in-house
+  fine-tuned models; only the optional translation step calls an external LLM,
+  and it is never blocking.
+- **The browser does the heavy audio prep.** Audio is decoded and resampled to
+  16 kHz mono client-side, guaranteeing format compatibility regardless of the
+  server's installed codecs.
+- **The frontend never exposes the backend for file requests.** All file-based
+  calls go through Next.js route handlers that add rate-limiting, same-origin
+  checks, size limits and timeout handling.
+
+---
+
+## 4. Technology Stack
+
+### 4.1 Core Models
 
 | Component | Technology | Role |
 |-----------|-----------|------|
-| Base model | **OpenAI Whisper large-v3** | Foundation speech-to-text architecture |
-| Wolof model | **`afriklang_asr_wo1`** | Fine-tuned, merged standalone model (Wolof) |
-| Twi models | **`afriklang_asr_tw1` / `tw2`** | Fine-tuned, merged standalone models (Twi) |
-| Runtime dependency | **None (PEFT merged)** | Models are fused — no PEFT adapters loaded at runtime |
+| ASR base model | **OpenAI Whisper large-v3** | Foundation speech-to-text architecture |
+| Wolof ASR | Fine-tuned, merged standalone model | Speech recognition (Wolof) |
+| Twi ASR | Fine-tuned, merged standalone model | Speech recognition (Twi) |
+| Twi TTS | **VoxCPM** (AudioVAE latent, 48 kHz) | Text-to-speech (Twi) |
+| Runtime dependency | **None (PEFT merged)** | Adapters baked into weights — no PEFT at runtime |
 
-The models are **merged and autonomous**: adapters are baked into the weights, so
-inference has no PEFT dependency and can be served directly.
+The ASR models are **merged and autonomous**: adapters are fused into the
+weights, so inference has no PEFT dependency and can be served directly.
 
-### 3.2 Voice Activity Detection (Live mode)
+### 4.2 Voice Activity Detection (Live mode)
 
 | Component | Technology | Role |
 |-----------|-----------|------|
 | VAD | **Silero VAD v5** | Detects speech start/end in the live audio stream |
 | Streaming pattern | Inspired by **`huggingface/speech-to-speech`** | Each detected segment is transcribed independently |
 
-### 3.3 Backend & API
+### 4.3 Backend & API
 
 | Component | Technology | Role |
 |-----------|-----------|------|
 | API framework | **FastAPI** | HTTP + WebSocket endpoints, auto-generated Swagger docs |
-| Transcription endpoint | `POST /transcribe/{wo\|twi}` | File-based transcription → `{ "text": "..." }` |
+| ASR endpoint | `POST /transcribe/{wo\|twi}` | File-based transcription → `{ "text": "..." }` |
 | Live endpoint | `WS /transcribe/live/{wo\|twi}` | Streaming transcription over WebSocket |
+| TTS endpoint | `POST /tts/twi` | Text → `audio/wav` (48 kHz) |
 | Health endpoint | `GET /health` | Service and model readiness |
 | Server | **Uvicorn** (ASGI) | Runs the FastAPI application |
-| Audio processing | **ffmpeg** | Audio decoding / format normalization |
+| Audio processing | **ffmpeg + librosa + soundfile** | Audio decoding / format normalization |
 | Runtime | **Python 3.11** | Language runtime |
 
-### 3.4 Frontend
+### 4.4 Frontend
 
 | Component | Technology | Role |
 |-----------|-----------|------|
-| UI framework | **Next.js + Tailwind CSS** | Call-center inbox interface |
-| Alternative | **Streamlit** | Faster option if the team stays Python-only |
+| Framework | **Next.js 16 (App Router) + React 19** | Chat interface + server route handlers |
+| Styling | **Tailwind CSS 4** | UI styling |
+| Icons / flags | **lucide-react**, **react-circle-flags** | UI assets |
+| Tests | **Vitest + Testing Library** | Unit test suite |
+| Audio capture | **Web Audio API** (`ScriptProcessorNode`) | Live mic capture & resampling |
 
-### 3.5 Data & Search
-
-| Component | Technology | Role |
-|-----------|-----------|------|
-| Database | **PostgreSQL** | Message history, metadata, transcriptions |
-| Search | **PostgreSQL full-text search** | Searchable / filterable transcriptions |
-| Alternative search | **Elasticsearch** | If time allows, for richer indexing |
-| Audio storage | **AWS S3** (`afriklang-data`) | Raw audio file storage |
-
-### 3.6 Infrastructure & Deployment
+### 4.5 Translation (optional)
 
 | Component | Technology | Role |
 |-----------|-----------|------|
-| Model training / inference | **AWS SageMaker** | Fine-tuning and model serving infrastructure |
-| Model registry (storage) | **AWS S3** (SageMaker bucket) | Model artifacts, auto-downloaded on startup |
+| Provider (default) | **GitHub Models** (`gpt-4o-mini`) | Free-tier LLM translation |
+| Provider (fallback) | **RodiumAI** | Used if no GitHub Models token |
+| Behavior | Non-blocking | Ignored if no key configured; never breaks ASR |
+
+### 4.6 Infrastructure & Deployment
+
+| Component | Technology | Role |
+|-----------|-----------|------|
+| Model training / storage | **AWS SageMaker + S3** | Fine-tuning and model artifact storage (auto-downloaded on startup) |
 | Demo compute | **AWS EC2 `g4dn.xlarge`** (GPU T4, 16 GB) | Recommended GPU instance for inference |
 | Base image | **Deep Learning AMI (PyTorch)** | Ships torch + CUDA preinstalled |
-| Containerization | **Docker** (`python:3.11-slim` + ffmpeg) | Portable, reproducible deployment |
-| GPU containers | **nvidia-docker** | GPU-accelerated inference in containers |
-| Frontend hosting | **Vercel / Railway** | Deploy the inbox interface |
-| Secure tunneling | **Cloudflare Tunnel (`cloudflared`)** | HTTPS for microphone capture (`getUserMedia`) during demos |
+| Containerization | **Docker** (`python:3.11-slim` + ffmpeg) | Portable, reproducible backend |
+| Frontend hosting | **AWS Amplify** | CI/CD + hosting for the interface |
+| Secure tunneling | **Cloudflare Tunnel (`cloudflared`)** | HTTPS for microphone capture (`getUserMedia`) in demos |
 
 ---
 
-## 4. AI Modules
+## 5. Backend Service (`app/`)
 
-| Module | Function | Implementation approach |
-|--------|----------|-------------------------|
-| Reception / Call simulation | Simulate a new voice message arriving in the queue | Pre-recorded Twi/Wolof messages or live mic capture |
-| ASR transcription | Speech-to-text + language detection | Fine-tuned Afriklang Whisper models |
-| Keyword detection | Detect urgency / category signals | Deterministic keyword rules on transcribed text |
-| Indexing & search | Make transcriptions searchable and filterable | Full-text search + tag filters |
+A single FastAPI service loads all three models at startup and serves them from
+one GPU.
 
-**Transcription output schema:**
+**Endpoints:**
 
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/` | Redirects to `/docs` (Swagger) |
+| `POST` | `/transcribe/wo` | Wolof transcription (file) → `{ "text": "..." }` |
+| `POST` | `/transcribe/twi` | Twi transcription (file) → `{ "text": "..." }` |
+| `WS` | `/transcribe/live/{wo\|twi}` | Live streaming transcription |
+| `POST` | `/tts/twi` | Twi speech synthesis → `audio/wav` (48 kHz) |
+| `GET` | `/health` | Service and model status |
+
+`/transcribe/*` accept an optional `?target_lang=fr` (or `en`): the transcript is
+then also translated and returned in a `translation` field (file) or via a
+`{"type": "translation", ...}` message (live).
+
+### Engineering notes
+
+- **Single-inference GPU serialization.** A one-thread `ThreadPoolExecutor`
+  serializes every model call (ASR or TTS) so the 16 GB T4 is never
+  over-committed, without blocking the asyncio loop.
+- **Hallucination filtering.** Whisper invents plausible text on silence (e.g.
+  subtitle-credit phrases). Teekiai combines Whisper's native no-speech /
+  logprob / compression thresholds with a pattern filter to drop these outputs.
+- **Live VAD segmentation.** Silero VAD v5 detects speech boundaries in the raw
+  PCM stream, with a ~0.5 s pre-roll and a forced flush before Whisper's 30 s
+  window limit.
+
+### Quick start (local / CPU)
+
+```bash
+cd app
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000
 ```
-{ "text": "...", "language": "tw", "confidence": 0.00, "confidence_level": "high|medium|low" }
+
+Check readiness: `curl http://localhost:8000/health`
+
+> `torch` should be installed separately for CUDA
+> (`pip install torch --index-url https://download.pytorch.org/whl/cu118`),
+> or provided by the GPU AMI — do not reinstall it there.
+
+### Docker
+
+```bash
+cd app
+docker build -t teekiai-asr .
+docker run --rm --gpus all -p 8000:8000 \
+  -v $(pwd)/models:/app/models \
+  teekiai-asr
 ```
 
 ---
 
-## 5. Transcription Quality & Trust Engine
+## 6. Web Interface (`interface/`)
 
-A wrong transcription in a call-center context can lead to mis-routing, so the
-product stays **honest about its limits** — transcriptions are presented as
-measurable, verifiable outputs, never as a guarantee of perfect accuracy.
+A multilingual chat app with three modes — **ASR**, **TTS**, and
+**Translation** — driven by a single controller hook.
 
-The engine uses a **traffic-light approach** based on the model's own confidence score:
+### The proxy layer
 
-| Level | Meaning | Behavior |
-|-------|---------|----------|
-| 🟢 **Green** | High confidence | Transcription displayed and indexed automatically |
-| 🟡 **Amber** | Medium confidence | Displayed with a "verify with audio" note |
-| 🔴 **Red** | Low confidence | Flagged "needs manual review", not auto-indexed |
+The interface never calls the backend directly for file requests. Instead,
+Next.js **route handlers** (`/api/asr/transcribe`, `/api/tts/twi`) proxy each
+call and add:
 
-The confidence score is always shown next to the text and is never hidden from the
-agent. Below a minimum threshold, messages are flagged for review rather than
-auto-categorized.
+- **Rate-limiting** per client IP
+- **Same-origin checks** to block other sites from driving the proxy
+- **Size limits** (10 MB uploads) and content-type validation
+- A **27 s upstream timeout** that returns a clean JSON error *before* the
+  hosting CDN's ~30 s gateway timeout fires an opaque 504
+
+The **live WebSocket path bypasses the proxy** (its URL is client-visible via
+`NEXT_PUBLIC_ASR_WS_URL`), which is why the backend enables permissive CORS.
+
+### Client-side audio handling
+
+- Audio is decoded and **resampled to 16 kHz mono in the browser**
+  (`OfflineAudioContext`), guaranteeing codec compatibility.
+- Long recordings (>1 min) are **split into segments cut at the quietest point**
+  near each boundary, so no spoken word is sliced. Each segment finishes well
+  under the timeout, and transcripts are stitched back together.
+- Live capture uses `ScriptProcessorNode` → JS resample → 16-bit PCM frames
+  streamed over the WebSocket.
+
+### Getting started
+
+```bash
+cd interface
+npm install
+cp .env.example .env.local   # set ASR_API_URL and NEXT_PUBLIC_ASR_WS_URL
+npm run dev                  # http://localhost:3000
+```
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm run test` | Vitest unit suite |
+| `npm run lint` | ESLint |
+| `npm run type-check` | TypeScript (`tsc --noEmit`) |
+
+### CI/CD
+
+Every push / PR to `main` and `dev` runs a pipeline (lint, type-check, format,
+Vitest, security audit, `next build`). On a passing push to `main`, deployment
+to **AWS Amplify** is triggered via an incoming webhook.
 
 ---
 
-## 6. Live Transcription (WebSocket Protocol)
+## 7. Live Transcription (WebSocket Protocol)
 
 Live mode is inspired by [huggingface/speech-to-speech](https://github.com/huggingface/speech-to-speech).
-**Silero VAD v5** detects speech boundaries in the incoming stream; each segment is
-transcribed by the Whisper model of the chosen language.
+**Silero VAD v5** detects speech boundaries in the incoming stream; each segment
+is transcribed by the Whisper model of the chosen language.
 
 **Protocol:**
 
@@ -181,88 +296,95 @@ transcribed by the Whisper model of the chosen language.
   - `{"type": "speech_start"}` — when speech begins
   - `{"type": "transcript", "text": "...", "final": true}` — on each transcribed
     segment (`"final": false` marks a partial segment when speech continues beyond ~28 s)
+  - `{"type": "translation", "text": "...", "target_lang": "fr"}` — when a
+    `?target_lang` is requested
 
 ---
 
-## 7. Data Model
+## 8. Transcription Quality & Trust
 
-Minimum schema for a two-day build:
+Speech recognition is never perfect, so Teekiai stays **honest about its
+limits** — transcriptions are presented as measurable, verifiable outputs, never
+as a guarantee of perfect accuracy.
 
-| Table | Key fields |
-|-------|-----------|
-| `operators` | id, company_name, pricing_plan, contract_status |
-| `voicemail_messages` | id, operator_id, caller_number, audio_url, received_at, status |
-| `transcriptions` | id, message_id, transcribed_text, confidence_score, confidence_level |
-| `message_tags` | id, message_id, category, urgency_level |
-| `usage_billing` | id, operator_id, period, volume_minutes, amount_billed |
+- Whisper's native thresholds and a pattern filter drop hallucinated text on
+  silence rather than emitting plausible-but-fake output.
+- Very short VAD triggers (noise, breath, clicks) are discarded before reaching
+  the model.
+- Translation is always framed as an optional enhancement and fails gracefully.
 
 ---
 
-## 8. Environment Configuration
+## 9. Configuration
+
+### Backend (`app/.env`)
 
 | Variable | Role | Default |
 |----------|------|---------|
-| `MODEL_DIR` | Local model directory | `./afriklang_asr_wo1` |
+| `MODEL_DIR_WO` | Local Wolof ASR model directory | `./teekiai_asr_wo1` |
+| `MODEL_DIR_TWI` | Local Twi ASR model directory | `./teekiai_asr_tw1` |
+| `MODEL_DIR_TTS_TWI` | Local Twi TTS model directory | `./teekiai_twi_ttsv1` |
 | `S3_BUCKET` | S3 bucket for automatic model download | _(unset)_ |
-| `S3_PREFIX` | S3 prefix of the model | `models/afriklang_asr_wo1` |
+| `GITHUB_MODELS_TOKEN` | GitHub PAT (`Models: Read-only`) — translation provider (priority) | _(unset)_ |
+| `RODIUMAI_API_KEY` | RodiumAI key — translation fallback | _(unset)_ |
+| `TRANSLATION_MODEL` | Model used for translation | `openai/gpt-4o-mini` |
 
-Models can be provisioned two ways:
-- **Manual** — copy artifacts from the SageMaker S3 bucket once.
-- **Automatic** — configure `S3_BUCKET` / `S3_PREFIX` so the model downloads on
-  first startup if absent.
+Without `GITHUB_MODELS_TOKEN` or `RODIUMAI_API_KEY`, `?target_lang` is simply ignored.
+
+### Frontend (`interface/.env.local`)
+
+| Variable | Role | Visibility |
+|----------|------|------------|
+| `ASR_API_URL` | Base URL of the backend service | Server-only |
+| `NEXT_PUBLIC_ASR_WS_URL` | Base WebSocket URL for live ASR | Client-visible |
 
 ---
 
-## 9. Users & Value
+## 10. Users & Value
 
 | Persona | Role | Primary need |
 |---------|------|--------------|
-| **Kofi** | Call-center agent | Read messages fast, prioritize urgent ones, trust the transcription |
-| **Kwame** | Operations Lead / CTO | Measurably reduce call-center processing cost |
+| **Everyday speaker** | Wolof / Twi / Fon speaker | Interact with digital services in their own language, by voice |
+| **Product builder** | Developer / operator | Add African-language speech to their product without building models from scratch |
 
-**Illustrative impact** *(explicitly framed as an estimate, not a fact)*: at ~45
-seconds of listening per message, a call center processing 10,000 messages/month
-ties up roughly **15.6 agent-days** just to listen — before any triage. Confirming
-these figures with real operator data turns a cost line into a calculable ROI.
+By exposing ASR, TTS and translation behind a simple API and chat interface,
+Teekiai lets any product speak, listen to, and understand West African languages
+that were previously unsupported.
 
 ---
 
-## 10. Roadmap
+## 11. Roadmap
 
 | Phase | Focus |
 |-------|-------|
-| **Hackathon MVP** | Full flow: reception → transcription → indexing → search |
-| **Pilot (1–3 months)** | Real integration with a partner operator, measured time savings |
+| **Hackathon MVP** | ASR + TTS + translation for Wolof & Twi, live and file modes |
 | **Language expansion** | Add Fon and other priority languages |
-| **Advanced reporting** | Analytics dashboard for operations leads |
-| **Scale** | Production API, guaranteed SLAs, automated billing |
+| **Coverage expansion** | Wolof/Fon TTS, wider translation pairs |
+| **Scale** | Production API, key-based auth, scale-to-zero GPU serving |
 
-**ASR engine roadmap (Phase 2):**
-- SageMaker Async Endpoint (scale-to-zero) for usage-only billing
+**Backend roadmap (Phase 2):**
+- SageMaker Async Endpoint (scale-to-zero) for usage-based billing
 - API-key authentication
 - Persistent-GPU WebSocket live transcription
 
 ---
 
-## 11. Ethics, Risk & Data Honesty
+## 12. Ethics, Risk & Data Honesty
 
-- Never present a transcription as 100% reliable — always show a confidence score.
-- Frame all impact figures as **estimates to be validated**, explicitly labeled as such.
-- Enforce a strict confidence threshold before any automatic routing.
-- Secure processing and storage of customer voice messages in production.
+- Never present a transcription as 100% reliable.
+- Filter hallucinated output rather than emitting fabricated text.
+- Frame translation as an optional, best-effort enhancement.
+- Secure processing and storage of user audio in production.
 - Test across regional variants and accents before real deployment.
-
-All figures related to literacy, message volume, agent cost, and time/cost impact
-are illustrative estimates or general background knowledge — **no unverified figure
-is presented as an established fact.**
 
 ---
 
-## 12. Licensing
+## 13. Licensing
 
-The Afriklang ASR models are fine-tuned derivatives of **OpenAI Whisper large-v3**
-(MIT). Upstream model licenses must be reviewed and respected before any commercial
-use — attribution is required where applicable.
+The Teekiai ASR models are fine-tuned derivatives of **OpenAI Whisper large-v3**
+(MIT), and the Twi TTS model builds on **VoxCPM**. Upstream model licenses must be
+reviewed and respected before any commercial use — attribution is required where
+applicable.
 
 ---
 
@@ -271,9 +393,9 @@ use — attribution is required where applicable.
 | # | Source | Used for |
 |---|--------|----------|
 | [1] | OpenAI Whisper documentation | Base ASR model and fine-tuning |
-| [2] | AWS SageMaker documentation | Fine-tuning and inference infrastructure |
-| [3] | GSMA — Sub-Saharan Africa mobile money reports | Voice / mobile money channel context |
-| [4] | Ghana / Senegal adult literacy rates | Accessibility context *(to be sourced)* |
+| [2] | VoxCPM | Base TTS model |
+| [3] | AWS SageMaker documentation | Fine-tuning and inference infrastructure |
+| [4] | Silero VAD | Voice activity detection for live mode |
 | [5] | huggingface/speech-to-speech | Live streaming / VAD architecture reference |
 
 ---

@@ -8,7 +8,7 @@ boto3
 silero-vad
 openai
 voxcpm
-# peft : plus nécessaire — le modèle afriklang_asr_wo1 est déjà fusionné (autonome)
+# peft : plus nécessaire — le modèle teekiai_asr_wo1 est déjà fusionné (autonome)
 # torch : NE PAS réinstaller — utiliser celui de l'instance GPU (build CUDA)
 #
 # IMPORTANT : toujours installer via `pip install -r requirements.txt` (résolution

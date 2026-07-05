@@ -1,5 +1,5 @@
 """
-Client d'exemple pour la transcription live Afriklang ASR.
+Client d'exemple pour la transcription live Teekiai ASR.
 
 Streame un fichier audio vers le endpoint WebSocket /transcribe/live/{lang}
 en simulant un flux micro temps réel, et affiche les transcriptions reçues.

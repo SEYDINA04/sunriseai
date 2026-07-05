@@ -17,7 +17,7 @@ const UPSTREAM_TIMEOUT_MS = 27_000
 
 /**
  * Language → backend path mapping.
- * Afriklang ASR v2 uses a single base URL with per-language routes:
+ * Teekiai ASR v2 uses a single base URL with per-language routes:
  *   POST {ASR_API_URL}/transcribe/wo   — Wolof
  *   POST {ASR_API_URL}/transcribe/twi  — Twi
  */

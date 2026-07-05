@@ -100,7 +100,7 @@ jobs:
       - run: npm run build
         env:
           # Build-time placeholder; the real value is injected by Amplify at deploy.
-          ASR_API_URL: ${{ vars.ASR_API_URL || 'https://asr.afriklang.com' }}
+          ASR_API_URL: ${{ vars.ASR_API_URL || 'https://asr.teekiai.com' }}
 
   audit:
     name: Security audit (npm audit)

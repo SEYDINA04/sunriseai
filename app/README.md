@@ -1,13 +1,13 @@
-# Afriklang ASR & TTS
+# Teekiai ASR & TTS
 
-Service de transcription (ASR) et de synthèse vocale (TTS) multi-langues, développé par Afriklang.
+Service de transcription (ASR) et de synthèse vocale (TTS) multi-langues, développé par Teekiai.
 
 Modèles :
-- **`afriklang_asr_wo1`** — ASR Wolof (Whisper fine-tuné, fusionné, autonome)
-- **`afriklang_asr_tw1`** — ASR Twi (Whisper fine-tuné, fusionné, autonome)
-- **`afriklang_twi_ttsv1`** — TTS Twi ([VoxCPM2](https://github.com/OpenBMB/VoxCPM), latent AudioVAE, sortie native 48 kHz)
+- **`teekiai_asr_wo1`** — ASR Wolof (Whisper fine-tuné, fusionné, autonome)
+- **`teekiai_asr_tw1`** — ASR Twi (Whisper fine-tuné, fusionné, autonome)
+- **`teekiai_twi_ttsv1`** — TTS Twi ([VoxCPM2](https://github.com/OpenBMB/VoxCPM), latent AudioVAE, sortie native 48 kHz)
 
-Ces trois modèles sont **entraînés et hébergés par Afriklang** (infrastructure GPU propre) —
+Ces trois modèles sont **entraînés et hébergés par Teekiai** (infrastructure GPU propre) —
 aucune dépendance à une API tierce pour l'ASR ou le TTS. Un service de traduction optionnel
 (`?target_lang=`) est également disponible en complément.
 
@@ -48,13 +48,13 @@ Protocole :
 
 Client d'exemple : [examples/live_client.py](examples/live_client.py)
 ```bash
-python examples/live_client.py mon_audio.wav --lang wo --url wss://asr.afriklang.com
+python examples/live_client.py mon_audio.wav --lang wo --url wss://asr.teekiai.com
 ```
 
 ### Synthèse vocale (TTS)
 
 ```bash
-curl -X POST https://asr.afriklang.com/tts/twi \
+curl -X POST https://asr.teekiai.com/tts/twi \
   -H "Content-Type: application/json" \
   -d '{"text": "Wo ho te sɛn?"}' \
   --output sortie.wav
@@ -88,8 +88,8 @@ pip install -r requirements.txt
 **Option A — Manuel** (à faire une fois) :
 ```bash
 aws s3 cp --recursive \
-  s3://sagemaker-us-east-1-478335820298/models/afriklang_asr_wo1/ \
-  ./afriklang_asr_wo1/
+  s3://sagemaker-us-east-1-478335820298/models/teekiai_asr_wo1/ \
+  ./teekiai_asr_wo1/
 ```
 
 **Option B — Automatique** (téléchargement au démarrage si le modèle est absent) :
@@ -113,7 +113,7 @@ Vérifie que le service est prêt : `curl http://localhost:8000/health`
 ### Build
 
 ```bash
-docker build -t afriklang-asr-wolof .
+docker build -t teekiai-asr .
 ```
 
 ### Run
@@ -121,25 +121,25 @@ docker build -t afriklang-asr-wolof .
 **Avec le modèle déjà en local :**
 ```bash
 docker run --rm -p 8000:8000 \
-  -v $(pwd)/afriklang_asr_wo1:/app/afriklang_asr_wo1 \
-  afriklang-asr-wolof
+  -v $(pwd)/teekiai_asr_wo1:/app/teekiai_asr_wo1 \
+  teekiai-asr
 ```
 
 **Avec téléchargement automatique depuis S3 :**
 ```bash
 docker run --rm -p 8000:8000 \
   -e S3_BUCKET=sagemaker-us-east-1-478335820298 \
-  -e S3_PREFIX=models/afriklang_asr_wo1 \
+  -e S3_PREFIX=models/teekiai_asr_wo1 \
   -e AWS_ACCESS_KEY_ID=... \
   -e AWS_SECRET_ACCESS_KEY=... \
-  afriklang-asr-wolof
+  teekiai-asr
 ```
 
 **Avec GPU (nvidia-docker) :**
 ```bash
 docker run --rm --gpus all -p 8000:8000 \
-  -v $(pwd)/afriklang_asr_wo1:/app/afriklang_asr_wo1 \
-  afriklang-asr-wolof
+  -v $(pwd)/teekiai_asr_wo1:/app/teekiai_asr_wo1 \
+  teekiai-asr
 ```
 
 ---
@@ -191,9 +191,9 @@ cloudflared tunnel --url http://localhost:8000
 
 | Variable | Rôle | Défaut |
 |----------|------|--------|
-| `MODEL_DIR_WO` | Dossier local du modèle ASR Wolof | `./afriklang_asr_wo1` |
-| `MODEL_DIR_TWI` | Dossier local du modèle ASR Twi | `./afriklang_asr_tw1` |
-| `MODEL_DIR_TTS_TWI` | Dossier local du modèle TTS Twi | `./afriklang_twi_ttsv1` |
+| `MODEL_DIR_WO` | Dossier local du modèle ASR Wolof | `./teekiai_asr_wo1` |
+| `MODEL_DIR_TWI` | Dossier local du modèle ASR Twi | `./teekiai_asr_tw1` |
+| `MODEL_DIR_TTS_TWI` | Dossier local du modèle TTS Twi | `./teekiai_twi_ttsv1` |
 | `S3_BUCKET` | Bucket S3 pour téléchargement auto des modèles | _(non défini)_ |
 | `GITHUB_MODELS_TOKEN` | PAT GitHub (`models:read`) pour la traduction — priorité sur RodiumAI | _(non défini)_ |
 | `RODIUMAI_API_KEY` | Clé API RodiumAI — repli si `GITHUB_MODELS_TOKEN` absent | _(non défini)_ |
@@ -222,10 +222,9 @@ Voir `.env.example` pour un template prêt à l'emploi.
 └── .gitignore          # Exclusions git (venv, modèle, fichiers audio…)
 ```
 
-L'interface utilisateur (chat web, dans `../interface/`) est développée et déployée
-depuis son propre repo, [Sayari-ai/afriklang-models-interfaces](https://github.com/Sayari-ai/afriklang-models-interfaces)
-(source de vérité, connecté à AWS Amplify) — elle est simplement reproduite ici pour
-que cette démo reste autonome.
+L'interface utilisateur (chat web) se trouve dans `../interface/` — elle consomme
+directement les endpoints de ce service (ASR fichier + live, TTS, traduction) et est
+déployée sur AWS Amplify.
 
 ---
 
@@ -239,5 +238,5 @@ que cette démo reste autonome.
 
 ## Licence
 
-`afriklang_asr_wo1` est un dérivé de `galsenai/whisper-large-v3-wo` (lui-même basé sur OpenAI Whisper large-v3, MIT).
+`teekiai_asr_wo1` est un dérivé de `galsenai/whisper-large-v3-wo` (lui-même basé sur OpenAI Whisper large-v3, MIT).
 Vérifier et respecter la licence GalsenAI avant tout usage commercial — attribution obligatoire.

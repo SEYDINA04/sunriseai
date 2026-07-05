@@ -1,9 +1,9 @@
 """
-Afriklang ASR — Service de transcription multi-langues (Afriklang).
+Teekiai ASR — Service de transcription multi-langues (Teekiai).
 
 Modèles chargés au démarrage :
-  - afriklang_asr_wo1  (Wolof)
-  - afriklang_asr_tw1  (Twi)
+  - teekiai_asr_wo1  (Wolof)
+  - teekiai_asr_tw1  (Twi)
 
 Endpoints :
   - POST /transcribe/{wo|twi}       transcription d'un fichier audio (option ?target_lang=fr pour traduire)
@@ -15,9 +15,9 @@ Lancement :
     uvicorn app:app --host 0.0.0.0 --port 8000
 
 Variables d'environnement :
-    MODEL_DIR_WO       dossier local du modèle ASR Wolof  (défaut: ./afriklang_asr_wo1)
-    MODEL_DIR_TWI      dossier local du modèle ASR Twi    (défaut: ./afriklang_asr_tw1)
-    MODEL_DIR_TTS_TWI  dossier local du modèle TTS Twi    (défaut: ./afriklang_twi_ttsv1)
+    MODEL_DIR_WO       dossier local du modèle ASR Wolof  (défaut: ./teekiai_asr_wo1)
+    MODEL_DIR_TWI      dossier local du modèle ASR Twi    (défaut: ./teekiai_asr_tw1)
+    MODEL_DIR_TTS_TWI  dossier local du modèle TTS Twi    (défaut: ./teekiai_twi_ttsv1)
     S3_BUCKET           bucket S3 pour téléchargement auto (optionnel)
     GITHUB_MODELS_TOKEN PAT GitHub (scope models:read) — fournisseur de traduction par défaut,
                          gratuit avec quota limité (15 req/min, 150 req/jour pour gpt-4o-mini)
@@ -72,15 +72,15 @@ LANG_NAMES = {"fr": "français", "en": "anglais", "es": "espagnol", "wo": "wolof
 
 MODELS = {
     "wo": {
-        "dir": os.environ.get("MODEL_DIR_WO", "./afriklang_asr_wo1"),
-        "s3_prefix": "models/afriklang_asr_wo1",
-        "name": "afriklang_asr_wo1",
+        "dir": os.environ.get("MODEL_DIR_WO", "./teekiai_asr_wo1"),
+        "s3_prefix": "models/teekiai_asr_wo1",
+        "name": "teekiai_asr_wo1",
         "pipeline": None,
     },
     "twi": {
-        "dir": os.environ.get("MODEL_DIR_TWI", "./afriklang_asr_tw1"),
-        "s3_prefix": "models/afriklang_asr_tw1",
-        "name": "afriklang_asr_tw1",
+        "dir": os.environ.get("MODEL_DIR_TWI", "./teekiai_asr_tw1"),
+        "s3_prefix": "models/teekiai_asr_tw1",
+        "name": "teekiai_asr_tw1",
         "pipeline": None,
     },
 }
@@ -88,9 +88,9 @@ MODELS = {
 # --- Synthèse vocale (TTS) : VoxCPM2, latent AudioVAE, sortie native 48 kHz ---
 TTS_MODELS = {
     "twi": {
-        "dir": os.environ.get("MODEL_DIR_TTS_TWI", "./afriklang_twi_ttsv1"),
-        "s3_prefix": "models/afriklang_twi_ttsv1",
-        "name": "afriklang_twi_ttsv1",
+        "dir": os.environ.get("MODEL_DIR_TTS_TWI", "./teekiai_twi_ttsv1"),
+        "s3_prefix": "models/teekiai_twi_ttsv1",
+        "name": "teekiai_twi_ttsv1",
         "model": None,
     },
 }
@@ -149,7 +149,7 @@ def _ensure_model_local(model_dir: str, s3_prefix: str):
         fname = os.path.basename(obj["Key"])
         if fname:
             s3.download_file(S3_BUCKET, obj["Key"], os.path.join(model_dir, fname))
-            print("[afriklang] telecharge :", fname)
+            print("[teekiai] telecharge :", fname)
 
 
 def _load_pipeline(model_dir: str, device: str, dtype) -> pipeline:
@@ -175,12 +175,12 @@ def _load_all_models():
     for lang, cfg in MODELS.items():
         _ensure_model_local(cfg["dir"], cfg["s3_prefix"])
         cfg["pipeline"] = _load_pipeline(cfg["dir"], device, dtype)
-        print(f"[afriklang] {cfg['name']} chargé sur {device}")
+        print(f"[teekiai] {cfg['name']} chargé sur {device}")
 
     for lang, cfg in TTS_MODELS.items():
         _ensure_model_local(cfg["dir"], cfg["s3_prefix"])
         cfg["model"] = VoxCPM.from_pretrained(cfg["dir"], load_denoiser=False)
-        print(f"[afriklang] {cfg['name']} chargé (TTS)")
+        print(f"[teekiai] {cfg['name']} chargé (TTS)")
 
 
 @asynccontextmanager
@@ -190,16 +190,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Afriklang ASR",
+    title="Teekiai ASR",
     description="API de transcription automatique — Wolof (wo) et Twi (twi). "
                 "Fichier via POST /transcribe/{lang}, live via WebSocket /transcribe/live/{lang}.",
     version="2.1.0",
     lifespan=lifespan,
 )
 
-# Ouvert car le navigateur appelle cette API directement depuis l'interface officielle
-# (Sayari-ai/afriklang-models-interfaces) — notamment le WebSocket live, dont l'URL
-# est client-visible (NEXT_PUBLIC_ASR_WS_URL) et donc jamais proxifiée côté serveur.
+# Ouvert car le navigateur appelle cette API directement depuis l'interface Teekiai
+# (dossier interface/) — notamment le WebSocket live, dont l'URL est client-visible
+# (NEXT_PUBLIC_ASR_WS_URL) et donc jamais proxifiée côté serveur.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -238,7 +238,7 @@ async def _translate(text: str, source_lang: str, target_lang: str) -> str | Non
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
-        print(f"[afriklang] erreur traduction : {e}")
+        print(f"[teekiai] erreur traduction : {e}")
         return None
 
 
@@ -397,7 +397,7 @@ async def transcribe_live(ws: WebSocket, lang: str, target_lang: str | None = No
             lambda: cfg["pipeline"](audio, generate_kwargs=WHISPER_GENERATE_KWARGS)["text"].strip(),
         )
         if text and _is_hallucination(text):
-            print(f"[afriklang] hallucination filtrée : {text!r}")
+            print(f"[teekiai] hallucination filtrée : {text!r}")
             text = ""
         if text:
             await ws.send_json(

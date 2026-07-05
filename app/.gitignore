@@ -16,7 +16,7 @@ env/
 ENV/
 
 # Modèle (lourd, géré via S3)
-afriklang_asr_wo1/
+teekiai_asr_wo1/
 
 # Audio temporaire / uploads
 *.wav
