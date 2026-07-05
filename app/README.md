@@ -222,9 +222,10 @@ Voir `.env.example` pour un template prêt à l'emploi.
 └── .gitignore          # Exclusions git (venv, modèle, fichiers audio…)
 ```
 
-L'interface utilisateur officielle (chat web) vit dans son propre repo :
-[Sayari-ai/afriklang-models-interfaces](https://github.com/Sayari-ai/afriklang-models-interfaces).
-Ce repo-ci n'expose que l'API — aucune UI n'y est plus maintenue.
+L'interface utilisateur (chat web, dans `../interface/`) est développée et déployée
+depuis son propre repo, [Sayari-ai/afriklang-models-interfaces](https://github.com/Sayari-ai/afriklang-models-interfaces)
+(source de vérité, connecté à AWS Amplify) — elle est simplement reproduite ici pour
+que cette démo reste autonome.
 
 ---
 
