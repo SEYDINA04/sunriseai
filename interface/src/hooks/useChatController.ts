@@ -6,6 +6,7 @@ import { useTranslation, type TranslationKey } from "@/lib/i18n"
 import { uid } from "@/lib/storage"
 import type { Message, Mode } from "@/lib/types"
 import { translate, synthesize, streamText } from "@/lib/mockInference"
+import { synthesizeTwi } from "@/lib/tts"
 import { transcribeAudio } from "@/lib/asr"
 import { persistAudio } from "@/lib/audioStorage"
 
@@ -19,27 +20,29 @@ export interface ChatController {
   targetLang: string
   setTargetLang: (c: string) => void
   swapLangs: () => void
+  /** Optional translation target for ASR mode (null = no translation). */
+  asrTargetLang: string | null
+  setAsrTargetLang: (lang: string | null) => void
   isStreaming: boolean
   sendText: (text: string) => Promise<void>
   sendAudio: (blob: Blob) => Promise<void>
+  /** Store a live transcript (from WebSocket) directly as a conversation turn. */
+  sendTranscriptDirect: (text: string, lang: string, translatedText?: string) => void
 }
 
 export function useChatController(): ChatController {
   const conv = useConversations()
   const { t } = useTranslation()
-  // Default to ASR — the only mode with a live backend (Translation/TTS are
-  // currently disabled in the ModeSelector). Change back to "translation" when
-  // those modes are re-enabled.
   const [mode, setModeState] = useState<Mode>("asr")
   const [lang, setLang] = useState("WO")
   const [sourceLang, setSourceLang] = useState("WO")
   const [targetLang, setTargetLang] = useState("FR")
+  const [asrTargetLang, setAsrTargetLang] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
 
-  // Entering ASR forces Wolof — the only language the ASR model currently supports.
+  // ASR supports WO and TW. TTS supports TW. No forced language reset on mode switch.
   const setMode = useCallback((m: Mode) => {
     setModeState(m)
-    if (m === "asr") setLang("WO")
   }, [])
 
   const swapLangs = useCallback(() => {
@@ -59,7 +62,7 @@ export function useChatController(): ChatController {
       })
       return id
     },
-    [conv]
+    [conv],
   )
 
   const sendText = useCallback(
@@ -90,7 +93,7 @@ export function useChatController(): ChatController {
         })
         const result = await translate(sourceLang, targetLang, trimmed)
         await streamText(result, (partial) =>
-          conv.updateMessage(conversationId, assistantId, { text: partial })
+          conv.updateMessage(conversationId, assistantId, { text: partial }),
         )
         conv.updateMessage(conversationId, assistantId, { status: "done" })
       } else if (mode === "tts") {
@@ -107,16 +110,22 @@ export function useChatController(): ChatController {
           mode: "tts",
           lang,
         })
-        const audioUrl = await synthesize(trimmed, lang)
-        conv.updateMessage(conversationId, assistantId, {
-          audioUrl,
-          status: "done",
-        })
+        try {
+          // Twi has a real TTS backend; other languages fall back to mock.
+          const audioUrl =
+            lang === "TW" ? await synthesizeTwi(trimmed) : await synthesize(trimmed, lang)
+          conv.updateMessage(conversationId, assistantId, { audioUrl, status: "done" })
+        } catch {
+          conv.updateMessage(conversationId, assistantId, {
+            text: t("error.tts"),
+            status: "error",
+          })
+        }
       }
 
       setIsStreaming(false)
     },
-    [conv, mode, sourceLang, targetLang, lang, isStreaming, addAssistantPlaceholder]
+    [conv, mode, sourceLang, targetLang, lang, isStreaming, addAssistantPlaceholder, t],
   )
 
   const sendAudio = useCallback(
@@ -125,16 +134,18 @@ export function useChatController(): ChatController {
       setIsStreaming(true)
 
       const conversationId = conv.ensureConversation(
-        t("transcriptionTitle", { lang: t(`lang.${lang}` as TranslationKey) })
+        t("transcriptionTitle", { lang: t(`lang.${lang}` as TranslationKey) }),
       )
       const stored = await persistAudio(blob)
+      const audioUrl = stored.url
 
       conv.addMessage(conversationId, {
         id: uid(),
         role: "user",
         mode: "asr",
-        audioUrl: stored.url,
+        audioUrl,
         audioKey: stored.key,
+        text: audioUrl ? undefined : t("bubble.audio"),
         lang,
         status: "done",
         createdAt: Date.now(),
@@ -143,14 +154,18 @@ export function useChatController(): ChatController {
         mode: "asr",
         text: "",
         lang,
+        targetLang: asrTargetLang ?? undefined,
       })
 
       try {
-        const result = await transcribeAudio(blob)
-        await streamText(result, (partial) =>
-          conv.updateMessage(conversationId, assistantId, { text: partial })
+        const result = await transcribeAudio(blob, lang, asrTargetLang ?? undefined)
+        await streamText(result.text, (partial) =>
+          conv.updateMessage(conversationId, assistantId, { text: partial }),
         )
-        conv.updateMessage(conversationId, assistantId, { status: "done" })
+        conv.updateMessage(conversationId, assistantId, {
+          status: "done",
+          ...(result.translation ? { translatedText: result.translation } : {}),
+        })
       } catch {
         conv.updateMessage(conversationId, assistantId, {
           text: t("error.transcription"),
@@ -160,7 +175,37 @@ export function useChatController(): ChatController {
         setIsStreaming(false)
       }
     },
-    [conv, lang, isStreaming, addAssistantPlaceholder, t]
+    [conv, lang, asrTargetLang, isStreaming, addAssistantPlaceholder, t],
+  )
+
+  const sendTranscriptDirect = useCallback(
+    (text: string, transcribedLang: string, translatedText?: string) => {
+      if (!text.trim()) return
+      const conversationId = conv.ensureConversation(
+        t("transcriptionTitle", { lang: t(`lang.${transcribedLang}` as TranslationKey) }),
+      )
+      conv.addMessage(conversationId, {
+        id: uid(),
+        role: "user",
+        mode: "asr",
+        lang: transcribedLang,
+        text: t("composer.liveReady"),
+        status: "done",
+        createdAt: Date.now(),
+      })
+      conv.addMessage(conversationId, {
+        id: uid(),
+        role: "assistant",
+        mode: "asr",
+        text: text.trim(),
+        lang: transcribedLang,
+        targetLang: asrTargetLang ?? undefined,
+        translatedText,
+        status: "done",
+        createdAt: Date.now(),
+      })
+    },
+    [conv, t, asrTargetLang],
   )
 
   return {
@@ -173,8 +218,11 @@ export function useChatController(): ChatController {
     targetLang,
     setTargetLang,
     swapLangs,
+    asrTargetLang,
+    setAsrTargetLang,
     isStreaming,
     sendText,
     sendAudio,
+    sendTranscriptDirect,
   }
 }

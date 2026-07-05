@@ -61,18 +61,12 @@ export function ChatShell() {
           collapsed ? "w-[68px]" : "w-[280px]"
         }`}
       >
-        <Sidebar
-          {...sidebarProps}
-          collapsed={collapsed}
-          onToggle={() => setCollapsed((c) => !c)}
-        />
+        <Sidebar {...sidebarProps} collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       </aside>
 
       {/* Mobile drawer */}
       <div
-        className={`fixed inset-0 z-50 md:hidden ${
-          mobileOpen ? "" : "pointer-events-none"
-        }`}
+        className={`fixed inset-0 z-50 md:hidden ${mobileOpen ? "" : "pointer-events-none"}`}
         aria-hidden={!mobileOpen}
       >
         <div
@@ -97,10 +91,7 @@ export function ChatShell() {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <ChatHeader
-          onOpenSidebar={() => setMobileOpen(true)}
-          onNew={handleNew}
-        />
+        <ChatHeader onOpenSidebar={() => setMobileOpen(true)} onNew={handleNew} />
         <div className="min-h-0 flex-1 overflow-hidden">
           {hasMessages ? (
             <MessageList messages={messages} />

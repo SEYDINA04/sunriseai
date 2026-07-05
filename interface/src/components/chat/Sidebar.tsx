@@ -78,9 +78,7 @@ export function Sidebar({
         <div className="scroll-thin flex-1 overflow-y-auto px-3 pb-3">
           <p className="px-3 pb-2 pt-2 text-xs font-medium text-text-muted">{t("recent")}</p>
           {sorted.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-text-muted/70">
-              {t("noConversations")}
-            </p>
+            <p className="px-3 py-2 text-xs text-text-muted/70">{t("noConversations")}</p>
           ) : (
             <ul className="flex flex-col gap-0.5">
               {sorted.map((c) => {

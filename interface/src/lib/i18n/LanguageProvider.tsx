@@ -9,17 +9,9 @@ import {
   type ReactNode,
 } from "react"
 import { loadLocale, saveLocale } from "@/lib/storage"
-import {
-  DEFAULT_LOCALE,
-  translate,
-  type Locale,
-  type TranslationKey,
-} from "./dictionary"
+import { DEFAULT_LOCALE, translate, type Locale, type TranslationKey } from "./dictionary"
 
-type TranslateFn = (
-  key: TranslationKey,
-  params?: Record<string, string | number>
-) => string
+type TranslateFn = (key: TranslationKey, params?: Record<string, string | number>) => string
 
 interface LanguageContextValue {
   locale: Locale
@@ -54,15 +46,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     saveLocale(next)
   }, [])
 
-  const t = useCallback<TranslateFn>(
-    (key, params) => translate(locale, key, params),
-    [locale]
-  )
+  const t = useCallback<TranslateFn>((key, params) => translate(locale, key, params), [locale])
 
   return (
-    <LanguageContext.Provider value={{ locale, setLocale, t }}>
-      {children}
-    </LanguageContext.Provider>
+    <LanguageContext.Provider value={{ locale, setLocale, t }}>{children}</LanguageContext.Provider>
   )
 }
 

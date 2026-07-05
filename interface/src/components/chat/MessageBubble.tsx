@@ -47,10 +47,14 @@ function IconButton({
 
 function useCopy() {
   const [copied, setCopied] = useState(false)
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // ignore (clipboard unavailable/denied)
+    }
   }
   return { copied, copy }
 }
@@ -61,8 +65,7 @@ export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user"
   const audioSrc = resolveAudioUrl({ url: message.audioUrl, key: message.audioKey })
 
-  const nameFor = (code?: string) =>
-    code ? t(`lang.${code}` as TranslationKey) : ""
+  const nameFor = (code?: string) => (code ? t(`lang.${code}` as TranslationKey) : "")
 
   const downloadText = () => {
     if (!message.text) return
@@ -165,6 +168,24 @@ export function MessageBubble({ message }: { message: Message }) {
             >
               {message.text}
             </p>
+
+            {/* ASR + translation result */}
+            {!streaming && message.translatedText && (
+              <div className="mt-3 border-t border-white/10 pt-3">
+                <p className="mb-1.5 inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+                  {t("bubble.translatedTo")}
+                  {message.targetLang && (
+                    <>
+                      {" "}→ <LangFlag code={message.targetLang} /> {nameFor(message.targetLang)}
+                    </>
+                  )}
+                </p>
+                <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-white/70">
+                  {message.translatedText}
+                </p>
+              </div>
+            )}
+
             {!streaming && message.text && (
               <div className="mt-2 flex items-center gap-0.5">
                 <IconButton

@@ -9,11 +9,7 @@ import { useTranslation } from "@/lib/i18n"
 export function TypingIndicator() {
   const { t } = useTranslation()
   return (
-    <div
-      className="flex h-4 items-center gap-[3px]"
-      role="status"
-      aria-label={t("generating")}
-    >
+    <div className="flex h-4 items-center gap-[3px]" role="status" aria-label={t("generating")}>
       {[0, 1, 2, 3].map((i) => (
         <span
           key={i}

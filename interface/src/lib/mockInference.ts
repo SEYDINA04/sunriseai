@@ -39,7 +39,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 export async function translate(
   sourceCode: string,
   targetCode: string,
-  _text: string
+  _text: string,
 ): Promise<string> {
   await delay(500)
   const key = `${sourceCode}-${targetCode}`
@@ -84,7 +84,7 @@ export async function synthesize(text: string, _langCode: string): Promise<strin
 export async function streamText(
   full: string,
   onChunk: (partial: string) => void,
-  opts: { stepMs?: number; charsPerStep?: number } = {}
+  opts: { stepMs?: number; charsPerStep?: number } = {},
 ): Promise<void> {
   const stepMs = opts.stepMs ?? 28
   const step = opts.charsPerStep ?? 3

@@ -1,0 +1,42 @@
+# Auto-merge Dependabot PRs once the full CI/CD pipeline passes.
+#
+# Strategy: enable GitHub native auto-merge for safe updates (patch + minor, and
+# all dev-dependency / GitHub Actions updates). The PR only actually merges after
+# every required status check from ci.yml succeeds. MAJOR production-dependency
+# updates are intentionally left for manual review.
+#
+# Prerequisites:
+#   - Repo Settings -> General -> "Allow auto-merge" is enabled.
+#   - Branch protection on `dev` requires the "All checks passed" status check.
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for safe updates
+        # Only patch + minor updates are auto-merged. MAJOR bumps (production OR
+        # development, e.g. ESLint 9->10) always require manual review because they
+        # can break tooling/build even when individual checks look green.
+        if: >
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

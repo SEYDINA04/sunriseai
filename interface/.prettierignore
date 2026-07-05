@@ -1,0 +1,18 @@
+# Build output
+.next/
+out/
+build/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Lockfiles (managed by npm)
+package-lock.json
+
+# Generated
+next-env.d.ts
+*.tsbuildinfo
+
+# Skills / tooling
+.claude/

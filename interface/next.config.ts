@@ -1,6 +1,6 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
 
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = process.env.NODE_ENV !== "production"
 
 // Content-Security-Policy: defense-in-depth for the untrusted model output we render.
 // - media/blob/data: Web Audio conversion + inline <audio> previews
@@ -21,7 +21,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
-].join("; ");
+].join("; ")
 
 const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
@@ -31,7 +31,7 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "microphone=(self), camera=(), geolocation=()" },
   // noindex on every response (also covers non-HTML assets a <meta> tag cannot).
   { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet" },
-];
+]
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -40,8 +40,8 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
-    ];
+    ]
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig

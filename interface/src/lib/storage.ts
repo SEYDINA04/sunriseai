@@ -70,6 +70,7 @@ export function saveActiveId(id: string | null): void {
 
 /** Stable-ish unique id without external deps. */
 export function uid(): string {
-  if (isBrowser() && "randomUUID" in crypto) return crypto.randomUUID()
+  const c = (globalThis as unknown as { crypto?: Crypto }).crypto
+  if (isBrowser() && typeof c?.randomUUID === "function") return c.randomUUID()
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }

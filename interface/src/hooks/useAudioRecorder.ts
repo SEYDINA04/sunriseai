@@ -38,7 +38,10 @@ export function useAudioRecorder(onReady: (blob: Blob) => void): UseAudioRecorde
       }
       recorder.onstop = () => {
         const blob = new Blob(chunks.current, { type: "audio/webm" })
-        setPreviewUrl(URL.createObjectURL(blob))
+        setPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return URL.createObjectURL(blob)
+        })
         onReady(blob)
         stream.getTracks().forEach((t) => t.stop())
       }
@@ -56,7 +59,10 @@ export function useAudioRecorder(onReady: (blob: Blob) => void): UseAudioRecorde
   }, [])
 
   const reset = useCallback(() => {
-    setPreviewUrl(null)
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
     chunks.current = []
   }, [])
 

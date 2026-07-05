@@ -37,7 +37,14 @@ export function LogoWaveform({ className = "h-5 w-7" }: { className?: string }) 
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        <linearGradient id="recwave-grad" x1="0" y1="0" x2="803" y2="590" gradientUnits="userSpaceOnUse">
+        <linearGradient
+          id="recwave-grad"
+          x1="0"
+          y1="0"
+          x2="803"
+          y2="590"
+          gradientUnits="userSpaceOnUse"
+        >
           <stop stopColor="var(--color-blue-soft)" />
           <stop offset="1" stopColor="var(--color-brand-indigo)" />
         </linearGradient>

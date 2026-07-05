@@ -32,8 +32,7 @@ function Waveform() {
             transformOrigin: "center",
             animationDelay: `${i * 0.11}s`,
             animationDuration: `${1.3 + (i % 3) * 0.22}s`,
-            background:
-              "linear-gradient(180deg, var(--color-blue-soft), var(--color-gold))",
+            background: "linear-gradient(180deg, var(--color-blue-soft), var(--color-gold))",
           }}
         />
       ))}
@@ -58,11 +57,10 @@ export function EmptyState({
 
   // Greet in the selected African language; fall back to the UI locale when
   // the active translation pair has no local language (e.g. FR ↔ EN).
-  const greetingFor = (code: string) =>
-    languages.find((l) => l.code === code)?.greeting
+  const greetingFor = (code: string) => languages.find((l) => l.code === code)?.greeting
   const greeting =
     (mode === "translation"
-      ? greetingFor(sourceLang) ?? greetingFor(targetLang)
+      ? (greetingFor(sourceLang) ?? greetingFor(targetLang))
       : greetingFor(lang)) ?? t("greeting")
 
   return (

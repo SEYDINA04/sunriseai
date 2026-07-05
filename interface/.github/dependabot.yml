@@ -1,0 +1,64 @@
+# Automated dependency updates. Dependabot opens PRs that run through the full
+# CI/CD pipeline (.github/workflows/ci.yml); minor/patch updates are auto-merged
+# by .github/workflows/dependabot-auto-merge.yml once every check passes, so
+# dependencies are kept current *before* anything reaches production.
+version: 2
+updates:
+  # npm application dependencies
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Africa/Dakar"
+    open-pull-requests-limit: 10
+    target-branch: dev
+    versioning-strategy: increase
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: scope
+    groups:
+      # Batch low-risk updates into single PRs to reduce review/CI overhead.
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Next.js + React majors are coordinated, framework-wide upgrades — handle
+      # those deliberately rather than via automated PRs.
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+
+  # Keep the GitHub Actions in the pipeline itself up to date.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Africa/Dakar"
+    open-pull-requests-limit: 5
+    target-branch: dev
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

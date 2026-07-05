@@ -52,15 +52,14 @@ function reducer(state: State, action: Action): State {
       return { ...state, activeId: action.id }
     case "DELETE": {
       const conversations = state.conversations.filter((c) => c.id !== action.id)
-      const activeId =
-        state.activeId === action.id ? null : state.activeId
+      const activeId = state.activeId === action.id ? null : state.activeId
       return { ...state, conversations, activeId }
     }
     case "RENAME":
       return {
         ...state,
         conversations: state.conversations.map((c) =>
-          c.id === action.id ? touch({ ...c, title: action.title }) : c
+          c.id === action.id ? touch({ ...c, title: action.title }) : c,
         ),
       }
     case "CREATE":
@@ -73,9 +72,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         conversations: state.conversations.map((c) =>
-          c.id === action.id
-            ? touch({ ...c, messages: [...c.messages, action.message] })
-            : c
+          c.id === action.id ? touch({ ...c, messages: [...c.messages, action.message] }) : c,
         ),
       }
     case "UPDATE_MESSAGE":
@@ -86,10 +83,10 @@ function reducer(state: State, action: Action): State {
             ? touch({
                 ...c,
                 messages: c.messages.map((m) =>
-                  m.id === action.messageId ? { ...m, ...action.patch } : m
+                  m.id === action.messageId ? { ...m, ...action.patch } : m,
                 ),
               })
-            : c
+            : c,
         ),
       }
     default:
@@ -109,11 +106,7 @@ interface ConversationContextValue {
   /** Creates a conversation (if none active) and returns the id to operate on. */
   ensureConversation: (title: string) => string
   addMessage: (conversationId: string, message: Message) => void
-  updateMessage: (
-    conversationId: string,
-    messageId: string,
-    patch: Partial<Message>
-  ) => void
+  updateMessage: (conversationId: string, messageId: string, patch: Partial<Message>) => void
 }
 
 const ConversationContext = createContext<ConversationContextValue | null>(null)
@@ -153,17 +146,11 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   }, [state.activeId])
 
   const newConversation = useCallback(() => dispatch({ type: "NEW" }), [])
-  const selectConversation = useCallback(
-    (id: string) => dispatch({ type: "SELECT", id }),
-    []
-  )
-  const deleteConversation = useCallback(
-    (id: string) => dispatch({ type: "DELETE", id }),
-    []
-  )
+  const selectConversation = useCallback((id: string) => dispatch({ type: "SELECT", id }), [])
+  const deleteConversation = useCallback((id: string) => dispatch({ type: "DELETE", id }), [])
   const renameConversation = useCallback(
     (id: string, title: string) => dispatch({ type: "RENAME", id, title }),
-    []
+    [],
   )
 
   const ensureConversation = useCallback((title: string): string => {
@@ -186,17 +173,15 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const addMessage = useCallback(
     (conversationId: string, message: Message) =>
       dispatch({ type: "ADD_MESSAGE", id: conversationId, message }),
-    []
+    [],
   )
   const updateMessage = useCallback(
     (conversationId: string, messageId: string, patch: Partial<Message>) =>
       dispatch({ type: "UPDATE_MESSAGE", id: conversationId, messageId, patch }),
-    []
+    [],
   )
 
-  const activeConversation = state.conversations.find(
-    (c) => c.id === state.activeId
-  )
+  const activeConversation = state.conversations.find((c) => c.id === state.activeId)
 
   const value: ConversationContextValue = {
     conversations: state.conversations,
@@ -212,11 +197,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     updateMessage,
   }
 
-  return (
-    <ConversationContext.Provider value={value}>
-      {children}
-    </ConversationContext.Provider>
-  )
+  return <ConversationContext.Provider value={value}>{children}</ConversationContext.Provider>
 }
 
 export function useConversations(): ConversationContextValue {

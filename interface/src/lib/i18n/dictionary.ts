@@ -62,6 +62,7 @@ const en = {
   "composer.swap": "Swap languages",
   "composer.importAudio": "Upload audio",
   "composer.recording": "Recording…",
+  "composer.audioReady": "Audio ready",
   "composer.discardAudio": "Remove audio",
   "composer.record": "Record",
   "composer.stop": "Stop",
@@ -79,9 +80,22 @@ const en = {
   // Chat controller (stored conversation titles)
   transcriptionTitle: "{lang} transcription",
 
-  // Audio recorder
+  // ASR + translation
+  "asr.translateTo": "Translate to",
+  "asr.noTranslation": "No translation",
+
+  // Audio recorder / TTS errors
   "error.microphone": "Microphone access denied.",
   "error.transcription": "Transcription failed. Please try again.",
+  "error.tts": "Synthesis failed. Please try again.",
+
+  // Live (WebSocket) transcription
+  "composer.live": "Live",
+  "composer.liveActive": "Live recording…",
+  "composer.liveReady": "Transcript ready",
+
+  // Message bubble — translation block
+  "bubble.translatedTo": "Translated",
 
   // Language display names
   "lang.WO": "Wolof",
@@ -121,8 +135,7 @@ const fr: Record<TranslationKey, string> = {
 
   // Empty state
   greeting: "Bonjour",
-  "empty.translation":
-    "Saisissez du texte à traduire entre langues locales et internationales.",
+  "empty.translation": "Saisissez du texte à traduire entre langues locales et internationales.",
   "empty.tts": "Saisissez du texte pour générer de l'audio dans une langue locale.",
   "empty.asr": "Enregistrez ou importez un audio pour le transcrire en texte.",
   "empty.asrHintBefore": "Utilisez le micro ou",
@@ -146,6 +159,7 @@ const fr: Record<TranslationKey, string> = {
   "composer.swap": "Inverser les langues",
   "composer.importAudio": "Importer un audio",
   "composer.recording": "Enregistrement…",
+  "composer.audioReady": "Audio prêt",
   "composer.discardAudio": "Supprimer l'audio",
   "composer.record": "Enregistrer",
   "composer.stop": "Arrêter",
@@ -164,9 +178,22 @@ const fr: Record<TranslationKey, string> = {
   // Chat controller (stored conversation titles)
   transcriptionTitle: "Transcription {lang}",
 
-  // Audio recorder
+  // ASR + translation
+  "asr.translateTo": "Traduire en",
+  "asr.noTranslation": "Sans traduction",
+
+  // Audio recorder / TTS errors
   "error.microphone": "Accès au microphone refusé.",
   "error.transcription": "Échec de la transcription. Veuillez réessayer.",
+  "error.tts": "Échec de la synthèse. Veuillez réessayer.",
+
+  // Live (WebSocket) transcription
+  "composer.live": "En direct",
+  "composer.liveActive": "Enregistrement en direct…",
+  "composer.liveReady": "Transcription prête",
+
+  // Message bubble — translation block
+  "bubble.translatedTo": "Traduit",
 
   // Language display names
   "lang.WO": "Wolof",
@@ -187,11 +214,11 @@ export const dictionary: Record<Locale, Record<TranslationKey, string>> = { en, 
 export function translate(
   locale: Locale,
   key: TranslationKey,
-  params?: Record<string, string | number>
+  params?: Record<string, string | number>,
 ): string {
   const template = dictionary[locale]?.[key] ?? dictionary[DEFAULT_LOCALE][key] ?? key
   if (!params) return template
   return template.replace(/\{(\w+)\}/g, (_, name: string) =>
-    name in params ? String(params[name]) : `{${name}}`
+    name in params ? String(params[name]) : `{${name}}`,
   )
 }

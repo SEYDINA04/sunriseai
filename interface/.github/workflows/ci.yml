@@ -1,0 +1,159 @@
+# CI/CD pipeline: every check must pass before a production deploy is triggered.
+#
+# On pull requests and pushes to `dev`/`main`, all quality gates run in parallel:
+#   lint -> type-check -> format -> test -> build -> security audit
+#
+# Only after EVERY gate succeeds AND the event is a push to `main` does the
+# `deploy` job fire the AWS Amplify production build via an incoming webhook.
+#
+# Required repository secret:
+#   AMPLIFY_WEBHOOK_URL  - Amplify "Incoming webhook" URL for the production branch.
+#                          (Amplify console -> App settings -> Build settings ->
+#                           Incoming webhooks). Disable Amplify auto-build on the
+#                           connected branch so this workflow is the only trigger.
+name: CI/CD
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  type-check:
+    name: Type check (tsc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run type-check
+
+  format:
+    name: Format (Prettier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+
+  test:
+    name: Unit tests (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  build:
+    name: Production build (next build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          # Build-time placeholder; the real value is injected by Amplify at deploy.
+          ASR_API_URL: ${{ vars.ASR_API_URL || 'https://asr.afriklang.com' }}
+
+  audit:
+    name: Security audit (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # Fail the pipeline on high/critical advisories. Moderate-and-below are
+      # reported but not blocking (some live inside Next.js transitive deps and
+      # cannot be fixed without downgrading the framework).
+      - name: Fail on high/critical vulnerabilities
+        run: npm audit --audit-level=high
+      - name: Report all advisories (non-blocking)
+        if: always()
+        run: npm audit || true
+
+  # Aggregate gate — use THIS as the single required status check in branch
+  # protection rules for `main` and `dev`.
+  checks-passed:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    needs: [lint, type-check, format, test, build, audit]
+    steps:
+      - run: echo "All quality gates passed."
+
+  deploy:
+    name: Deploy to production (AWS Amplify)
+    runs-on: ubuntu-latest
+    needs: [checks-passed]
+    # Only deploy on a direct push to main — never on PRs or dev.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    steps:
+      - name: Trigger Amplify production build
+        env:
+          AMPLIFY_WEBHOOK_URL: ${{ secrets.AMPLIFY_WEBHOOK_URL }}
+        run: |
+          if [ -z "$AMPLIFY_WEBHOOK_URL" ]; then
+            echo "::warning::AMPLIFY_WEBHOOK_URL secret is not set. Skipping production deploy trigger."
+            exit 0
+          fi
+          echo "All gates green — triggering Amplify production deploy."
+          http_code=$(curl -sS -o /tmp/amplify_resp.json -w "%{http_code}" \
+            -X POST -H "Content-Type: application/json" \
+            -d '{}' "$AMPLIFY_WEBHOOK_URL")
+          echo "Amplify responded with HTTP $http_code"
+          cat /tmp/amplify_resp.json || true
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "::error::Amplify webhook returned non-2xx status ($http_code)."
+            exit 1
+          fi

@@ -22,9 +22,7 @@ export function LocaleToggle() {
             onClick={() => setLocale(code)}
             title={localeNames[code]}
             className={`rounded-full px-2.5 py-1 text-xs font-medium uppercase transition-colors ${
-              active
-                ? "bg-white/[0.1] text-white"
-                : "text-text-muted hover:text-white"
+              active ? "bg-white/[0.1] text-white" : "text-text-muted hover:text-white"
             }`}
           >
             {code}

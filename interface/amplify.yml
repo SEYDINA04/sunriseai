@@ -1,0 +1,23 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        # Amplify exposes branch environment variables at BUILD time, but does not
+        # reliably forward server-only vars to the Next.js SSR runtime (Lambda).
+        # Writing them to .env.production bakes them into the standalone server
+        # output so the /api/asr/transcribe route can read process.env.ASR_API_URL.
+        # NOTE: only list NON-public, server-only vars here.
+        - env | grep -e ASR_API_URL >> .env.production || true
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - .next/cache/**/*
+      - node_modules/**/*

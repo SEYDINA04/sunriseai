@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Mic, ChevronDown, Check } from "lucide-react"
+import { Mic, Volume2, ChevronDown, Check } from "lucide-react"
 import type { Mode } from "@/lib/types"
 import { useTranslation, type TranslationKey } from "@/lib/i18n"
 
@@ -11,13 +11,10 @@ const MODES: {
   subKey: TranslationKey
   icon: typeof Mic
 }[] = [
-  // Only Wolof speech-to-text (ASR) has a live backend today. Translation and
-  // TTS are still mocked, so they're disabled until their models are available.
-  // To re-enable: uncomment the line(s) below and re-add the matching
-  // lucide-react icons (Languages / Volume2) to the import above.
+  // Translation stays mocked — disabled until Wolof/Twi translation models are deployed.
   // { value: "translation", labelKey: "mode.translation", subKey: "mode.translationSub", icon: Languages },
   { value: "asr", labelKey: "mode.asr", subKey: "mode.asrSub", icon: Mic },
-  // { value: "tts", labelKey: "mode.tts", subKey: "mode.ttsSub", icon: Volume2 },
+  { value: "tts", labelKey: "mode.tts", subKey: "mode.ttsSub", icon: Volume2 },
 ]
 
 export function ModeSelector({

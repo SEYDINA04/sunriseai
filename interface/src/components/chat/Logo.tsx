@@ -28,7 +28,9 @@ export function LogoLockup({ className = "" }: { className?: string }) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
       <LogoMark className="h-7 w-7 shrink-0" />
-      <span className="font-display text-[18px] font-semibold tracking-tight text-white">Bambi</span>
+      <span className="font-display text-[18px] font-semibold tracking-tight text-white">
+        Bambi
+      </span>
     </span>
   )
 }

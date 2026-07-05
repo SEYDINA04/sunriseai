@@ -20,6 +20,8 @@ export interface Message {
   sourceLang?: string
   /** Translation target language code. */
   targetLang?: string
+  /** ASR+translation: translated output when target_lang was requested. */
+  translatedText?: string
   status: MessageStatus
   createdAt: number
 }
