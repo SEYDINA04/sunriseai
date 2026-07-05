@@ -106,6 +106,10 @@ WHISPER_GENERATE_KWARGS = {
     "logprob_threshold": -1.0,
     "compression_ratio_threshold": 2.4,
     "condition_on_prev_tokens": False,
+    # Requis par transformers pour activer le mécanisme de repli ci-dessus : sans
+    # cette échelle de températures, generate_with_fallback() compare `None > 0.0`
+    # en interne et plante (TypeError). Échelle standard du CLI Whisper d'OpenAI.
+    "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
 }
 
 # Whisper (et ses fine-tunes) hallucinent des mentions de crédit de sous-titrage

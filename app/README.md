@@ -142,15 +142,34 @@ docker run --rm --gpus all -p 8000:8000 \
 ## Déploiement AWS (EC2 recommandé)
 
 Instance recommandée pour la démo : **`g4dn.xlarge`** (GPU T4 16 Go, ~0,53 $/h).
-Utiliser l'AMI « Deep Learning AMI (PyTorch) » — torch + CUDA déjà installés.
+Utiliser l'AMI « Deep Learning OSS Nvidia Driver AMI GPU PyTorch » (Amazon Linux 2023) —
+torch + CUDA déjà installés.
 
 ```bash
-sudo apt-get update && sudo apt-get install -y ffmpeg
 pip install -r requirements.txt   # torch fourni par l'AMI, ne pas réinstaller
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 Ouvrir le port **8000** dans le Security Group (source = ton IP ou `0.0.0.0/0` pour la démo).
+
+### FFmpeg (bibliothèques partagées requises)
+
+Amazon Linux 2023 n'a pas `ffmpeg` dans ses dépôts `dnf`. **N'installe pas un build
+statique** (type johnvansickle.com) : `voxcpm` (via `torchaudio`/`torchcodec`) a besoin
+des bibliothèques partagées (`libavutil.so`, etc.), qu'un binaire statique ne fournit pas —
+symptôme observé : `500` sur `/transcribe/*` avec `OSError: libavutil.so.59: cannot open
+shared object file`, alors que `/tts/*` fonctionne (VoxCPM ne passe pas par ce chemin).
+
+Installer un build **shared** à la place :
+```bash
+curl -sL -o /tmp/ffmpeg.tar.xz \
+  https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-shared-7.1.tar.xz
+cd /tmp && tar -xf ffmpeg.tar.xz
+sudo cp ffmpeg-n7.1-latest-linux64-gpl-shared-7.1/lib/*.so* /usr/local/lib/
+sudo cp ffmpeg-n7.1-latest-linux64-gpl-shared-7.1/bin/* /usr/local/bin/
+echo '/usr/local/lib' | sudo tee /etc/ld.so.conf.d/local-ffmpeg.conf
+sudo ldconfig
+```
 
 ### Micro et HTTPS
 
