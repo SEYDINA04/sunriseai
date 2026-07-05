@@ -201,12 +201,17 @@ Voir `.env.example` pour un template prêt à l'emploi.
 
 ```
 .
-├── app.py              # Application FastAPI + frontend intégré
+├── app.py              # Application FastAPI (ASR, traduction, TTS)
 ├── requirements.txt    # Dépendances Python
 ├── Dockerfile          # Image Docker (python:3.11-slim + ffmpeg)
+├── examples/           # Client CLI de test pour le WebSocket live
 ├── .env.example        # Template de configuration
 └── .gitignore          # Exclusions git (venv, modèle, fichiers audio…)
 ```
+
+L'interface utilisateur officielle (chat web) vit dans son propre repo :
+[Sayari-ai/afriklang-models-interfaces](https://github.com/Sayari-ai/afriklang-models-interfaces).
+Ce repo-ci n'expose que l'API — aucune UI n'y est plus maintenue.
 
 ---
 

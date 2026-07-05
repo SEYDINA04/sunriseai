@@ -187,7 +187,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Ouvert pour permettre aux frontends de test (local ou distants) d'appeler l'API.
+# Ouvert car le navigateur appelle cette API directement depuis l'interface officielle
+# (Sayari-ai/afriklang-models-interfaces) — notamment le WebSocket live, dont l'URL
+# est client-visible (NEXT_PUBLIC_ASR_WS_URL) et donc jamais proxifiée côté serveur.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
