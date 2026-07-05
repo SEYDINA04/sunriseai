@@ -8,8 +8,8 @@ Modèles :
 - **`afriklang_twi_ttsv1`** — TTS Twi ([VoxCPM2](https://github.com/OpenBMB/VoxCPM), latent AudioVAE, sortie native 48 kHz)
 
 Ces trois modèles sont **entraînés et hébergés par Afriklang** (infrastructure GPU propre) —
-aucune dépendance à une API tierce pour l'ASR ou le TTS. Seule la traduction texte (optionnelle,
-`?target_lang=`) appelle un LLM externe.
+aucune dépendance à une API tierce pour l'ASR ou le TTS. Un service de traduction optionnel
+(`?target_lang=`) est également disponible en complément.
 
 ---
 
@@ -25,8 +25,8 @@ aucune dépendance à une API tierce pour l'ASR ou le TTS. Seule la traduction t
 | `GET` | `/health` | État du service et des modèles |
 
 Les endpoints `/transcribe/*` acceptent un paramètre optionnel `?target_lang=fr` (ou `en`) :
-le texte transcrit est alors aussi traduit via un LLM (`gpt-4o-mini` par défaut),
-et renvoyé dans le champ `translation` (fichier) ou via un message `{"type": "translation", ...}` (live).
+le texte transcrit est alors aussi traduit, et renvoyé dans le champ `translation` (fichier)
+ou via un message `{"type": "translation", ...}` (live).
 Nécessite `GITHUB_MODELS_TOKEN` (gratuit, priorité) ou `RODIUMAI_API_KEY` (repli) — sans
 l'un des deux, le paramètre est simplement ignoré.
 
