@@ -7,6 +7,10 @@ Modèles :
 - **`afriklang_asr_tw1`** — ASR Twi (Whisper fine-tuné, fusionné, autonome)
 - **`afriklang_twi_ttsv1`** — TTS Twi ([VoxCPM2](https://github.com/OpenBMB/VoxCPM), latent AudioVAE, sortie native 48 kHz)
 
+Ces trois modèles sont **entraînés et hébergés par Afriklang** (infrastructure GPU propre) —
+aucune dépendance à une API tierce pour l'ASR ou le TTS. Seule la traduction texte (optionnelle,
+`?target_lang=`) appelle un LLM externe.
+
 ---
 
 ## Endpoints
@@ -21,9 +25,10 @@ Modèles :
 | `GET` | `/health` | État du service et des modèles |
 
 Les endpoints `/transcribe/*` acceptent un paramètre optionnel `?target_lang=fr` (ou `en`) :
-le texte transcrit est alors aussi traduit via un LLM (RodiumAI, `gpt-4o-mini` par défaut),
+le texte transcrit est alors aussi traduit via un LLM (`gpt-4o-mini` par défaut),
 et renvoyé dans le champ `translation` (fichier) ou via un message `{"type": "translation", ...}` (live).
-Nécessite la variable d'environnement `RODIUMAI_API_KEY` — sans elle, le paramètre est simplement ignoré.
+Nécessite `GITHUB_MODELS_TOKEN` (gratuit, priorité) ou `RODIUMAI_API_KEY` (repli) — sans
+l'un des deux, le paramètre est simplement ignoré.
 
 ### Transcription live (WebSocket)
 
@@ -190,8 +195,16 @@ cloudflared tunnel --url http://localhost:8000
 | `MODEL_DIR_TWI` | Dossier local du modèle ASR Twi | `./afriklang_asr_tw1` |
 | `MODEL_DIR_TTS_TWI` | Dossier local du modèle TTS Twi | `./afriklang_twi_ttsv1` |
 | `S3_BUCKET` | Bucket S3 pour téléchargement auto des modèles | _(non défini)_ |
-| `RODIUMAI_API_KEY` | Clé API RodiumAI pour la traduction | _(non défini — `target_lang` ignoré)_ |
-| `TRANSLATION_MODEL` | Modèle RodiumAI utilisé pour traduire | `openai/gpt-4o-mini` |
+| `GITHUB_MODELS_TOKEN` | PAT GitHub (`models:read`) pour la traduction — priorité sur RodiumAI | _(non défini)_ |
+| `RODIUMAI_API_KEY` | Clé API RodiumAI — repli si `GITHUB_MODELS_TOKEN` absent | _(non défini)_ |
+| `TRANSLATION_MODEL` | Modèle utilisé pour traduire | `openai/gpt-4o-mini` |
+
+Sans `GITHUB_MODELS_TOKEN` ni `RODIUMAI_API_KEY`, `target_lang` est simplement ignoré.
+
+GitHub Models est gratuit mais limité (gpt-4o-mini : 15 req/min, 150 req/jour) — voir
+[la doc officielle](https://docs.github.com/en/github-models/use-github-models/prototyping-with-ai-models).
+Créer le token : [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+→ permission de compte **Models: Read-only**.
 
 Voir `.env.example` pour un template prêt à l'emploi.
 

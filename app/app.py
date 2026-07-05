@@ -18,9 +18,13 @@ Variables d'environnement :
     MODEL_DIR_WO       dossier local du modèle ASR Wolof  (défaut: ./afriklang_asr_wo1)
     MODEL_DIR_TWI      dossier local du modèle ASR Twi    (défaut: ./afriklang_asr_tw1)
     MODEL_DIR_TTS_TWI  dossier local du modèle TTS Twi    (défaut: ./afriklang_twi_ttsv1)
-    S3_BUCKET          bucket S3 pour téléchargement auto (optionnel)
-    RODIUMAI_API_KEY   clé API RodiumAI pour la traduction (optionnel — sans elle, ?target_lang est ignoré)
-    TRANSLATION_MODEL  modèle RodiumAI utilisé pour la traduction (défaut: openai/gpt-4o-mini)
+    S3_BUCKET           bucket S3 pour téléchargement auto (optionnel)
+    GITHUB_MODELS_TOKEN PAT GitHub (scope models:read) — fournisseur de traduction par défaut,
+                         gratuit avec quota limité (15 req/min, 150 req/jour pour gpt-4o-mini)
+    RODIUMAI_API_KEY    clé API RodiumAI — repli si GITHUB_MODELS_TOKEN absent (optionnel)
+    TRANSLATION_MODEL   modèle utilisé pour la traduction (défaut: openai/gpt-4o-mini)
+
+    Sans GITHUB_MODELS_TOKEN ni RODIUMAI_API_KEY, ?target_lang est simplement ignoré.
 """
 
 import os
@@ -51,13 +55,19 @@ from voxcpm import VoxCPM
 
 S3_BUCKET = os.environ.get("S3_BUCKET")
 
-# --- Traduction (via RodiumAI, API compatible OpenAI) ---
+# --- Traduction (GitHub Models par défaut — gratuit ; RodiumAI en repli) ---
+GITHUB_MODELS_TOKEN = os.environ.get("GITHUB_MODELS_TOKEN")
 RODIUMAI_API_KEY = os.environ.get("RODIUMAI_API_KEY")
 TRANSLATION_MODEL = os.environ.get("TRANSLATION_MODEL", "openai/gpt-4o-mini")
-TRANSLATION_CLIENT = (
-    AsyncOpenAI(api_key=RODIUMAI_API_KEY, base_url="https://api.rodiumai.io/v1")
-    if RODIUMAI_API_KEY else None
-)
+
+if GITHUB_MODELS_TOKEN:
+    TRANSLATION_CLIENT = AsyncOpenAI(
+        api_key=GITHUB_MODELS_TOKEN, base_url="https://models.github.ai/inference"
+    )
+elif RODIUMAI_API_KEY:
+    TRANSLATION_CLIENT = AsyncOpenAI(api_key=RODIUMAI_API_KEY, base_url="https://api.rodiumai.io/v1")
+else:
+    TRANSLATION_CLIENT = None
 LANG_NAMES = {"fr": "français", "en": "anglais", "es": "espagnol", "wo": "wolof", "twi": "twi"}
 
 MODELS = {
@@ -448,7 +458,8 @@ async def transcribe_live(ws: WebSocket, lang: str, target_lang: str | None = No
 
             pcm_rest = pcm_rest[n_win * VAD_WINDOW * 2:]
     except Exception:
-        pass
+        import traceback
+        traceback.print_exc()
     finally:
         vad.reset_states()
         with suppress(Exception):
